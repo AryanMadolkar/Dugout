@@ -358,10 +358,20 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
             warnings.append(f"OpenAI scan failed: {exc}")
 
     if not raw_detected:
+        if not settings.gemini_api_key and not settings.openai_api_key:
+            raise RuntimeError(
+                "Vision scan is not configured. Add GEMINI_API_KEY in your host's environment "
+                "(Vercel → Project → Settings → Environment Variables), then redeploy."
+            )
         try:
             raw_detected = _detect_with_ocr(image)
             scan_method = "ocr"
         except Exception as exc:
+            detail = str(exc)
+            if settings.gemini_api_key or settings.openai_api_key:
+                raise RuntimeError(
+                    f"Scan failed after vision attempt. {detail}"
+                ) from exc
             raise RuntimeError(
                 "Scan failed. Set GEMINI_API_KEY for vision scan, or install tesseract for OCR."
             ) from exc
