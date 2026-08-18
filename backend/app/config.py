@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     service_path_prefix: str = ""
     gemini_api_key: str = ""
-    gemini_vision_model: str = "gemini-2.0-flash"
+    gemini_vision_model: str = "gemini-2.5-flash"
     openai_api_key: str = ""
     openai_vision_model: str = "gpt-4o-mini"
 

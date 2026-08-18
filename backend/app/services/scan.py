@@ -216,6 +216,18 @@ def _parse_vision_payload(content: str) -> tuple[list[RawDetected], str | None]:
     return detected, data.get("formation")
 
 
+def _gemini_auth_attempts(api_key: str) -> list[tuple[dict[str, str], dict[str, str] | None]]:
+    bearer = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    api_key_header = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+    query_key = ({"Content-Type": "application/json"}, {"key": api_key})
+
+    # AQ.* tokens (e.g. from Google AI Studio / OAuth) use Bearer auth.
+    if api_key.startswith("AQ.") or api_key.startswith("ya29."):
+        return [(bearer, None), (api_key_header, None), query_key]
+
+    return [(api_key_header, None), (bearer, None), query_key]
+
+
 def _gemini_request(image: Image.Image, api_key: str, model: str) -> tuple[list[RawDetected], str | None]:
     from app.services.http import http_post
 
@@ -236,14 +248,8 @@ def _gemini_request(image: Image.Image, api_key: str, model: str) -> tuple[list[
         },
     }
 
-    auth_attempts: list[tuple[dict[str, str], dict[str, str] | None]] = [
-        ({"x-goog-api-key": api_key, "Content-Type": "application/json"}, None),
-        ({"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, None),
-        ({"Content-Type": "application/json"}, {"key": api_key}),
-    ]
-
     last_error = "unknown error"
-    for headers, params in auth_attempts:
+    for headers, params in _gemini_auth_attempts(api_key):
         try:
             response = http_post(url, headers=headers, json=payload, params=params, timeout=60.0)
             body = response.json()
@@ -264,11 +270,20 @@ def _gemini_request(image: Image.Image, api_key: str, model: str) -> tuple[list[
     raise RuntimeError(last_error)
 
 
+GEMINI_VISION_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-2.5-flash-lite",
+]
+
+
 def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | None]:
     if not settings.gemini_api_key:
         return [], None
 
-    models = [settings.gemini_vision_model or "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]
+    configured = settings.gemini_vision_model or GEMINI_VISION_MODELS[0]
+    models = [configured, *GEMINI_VISION_MODELS]
     seen: set[str] = set()
     last_error = "Gemini request failed"
     for model in models:
@@ -280,9 +295,7 @@ def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | No
         except RuntimeError as exc:
             last_error = str(exc)
 
-    raise RuntimeError(
-        f"{last_error}. Use a valid API key from https://aistudio.google.com/apikey (starts with AIza)."
-    )
+    raise RuntimeError(last_error)
 
 
 def _detect_with_openai(image: Image.Image) -> tuple[list[RawDetected], str | None]:
