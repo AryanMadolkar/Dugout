@@ -1,6 +1,11 @@
 import type { Fixture, IngestResult, Overview, Player } from "./types";
 import type { SavedSquad, SquadPlayer } from "./dashboard-data";
 
+function withProtocol(url: string): string {
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/")) return url;
+  return `https://${url}`;
+}
+
 /** Resolve API base at call time — VERCEL is not available in the browser bundle. */
 export function getApiUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
@@ -8,13 +13,13 @@ export function getApiUrl(): string {
   if (typeof window !== "undefined") {
     const isLocal =
       window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    if (isLocal) return envUrl || "http://localhost:8000";
-    if (envUrl && !envUrl.includes("localhost")) return envUrl;
+    if (isLocal) return envUrl ? withProtocol(envUrl) : "http://localhost:8000";
+    if (envUrl && !envUrl.includes("localhost")) return withProtocol(envUrl);
     return "/api/backend";
   }
 
-  if (envUrl && !envUrl.includes("localhost")) return envUrl;
-  return envUrl || "/api/backend";
+  if (envUrl && !envUrl.includes("localhost")) return withProtocol(envUrl);
+  return envUrl ? withProtocol(envUrl) : "/api/backend";
 }
 
 async function getJson<T>(path: string): Promise<T> {

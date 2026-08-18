@@ -218,15 +218,15 @@ def _parse_vision_payload(content: str) -> tuple[list[RawDetected], str | None]:
 def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | None]:
     if not settings.gemini_api_key:
         return [], None
-    import httpx
+    from app.services.http import http_post
 
     b64 = _image_to_b64(image)
-    model = settings.gemini_vision_model
+    model = settings.gemini_vision_model or "gemini-2.0-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-    response = httpx.post(
+    response = http_post(
         url,
-        params={"key": settings.gemini_api_key},
+        headers={"x-goog-api-key": settings.gemini_api_key, "Content-Type": "application/json"},
         json={
             "contents": [
                 {
@@ -243,7 +243,6 @@ def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | No
         },
         timeout=60.0,
     )
-    response.raise_for_status()
     body = response.json()
     candidates = body.get("candidates") or []
     if not candidates:
@@ -258,11 +257,11 @@ def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | No
 def _detect_with_openai(image: Image.Image) -> tuple[list[RawDetected], str | None]:
     if not settings.openai_api_key:
         return [], None
-    import httpx
+    from app.services.http import http_post
 
     b64 = _image_to_b64(image)
 
-    response = httpx.post(
+    response = http_post(
         "https://api.openai.com/v1/chat/completions",
         headers={"Authorization": f"Bearer {settings.openai_api_key}"},
         json={
@@ -280,7 +279,6 @@ def _detect_with_openai(image: Image.Image) -> tuple[list[RawDetected], str | No
         },
         timeout=60.0,
     )
-    response.raise_for_status()
     content = response.json()["choices"][0]["message"]["content"]
     return _parse_vision_payload(content)
 
