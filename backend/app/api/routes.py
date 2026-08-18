@@ -16,7 +16,6 @@ from app.api.schemas import (
 from app.db.models import Fixture, Gameweek, IngestRun, Player, Team
 from app.db.session import get_db
 from app.services.ingestion import current_gameweek, sync_bootstrap_and_fixtures
-from app.services.scan import scan_squad_image
 
 router = APIRouter()
 
@@ -196,6 +195,8 @@ async def scan_squad(
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Upload a PNG, JPG, or WebP screenshot.")
     try:
+        from app.services.scan import scan_squad_image
+
         image_bytes = await file.read()
         if len(image_bytes) > 10 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="Image too large (max 10MB).")

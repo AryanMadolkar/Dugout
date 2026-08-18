@@ -61,6 +61,8 @@ On Vercel, set environment variables:
 
 Local dev is unchanged: run backend on `:8000` and frontend on `:3000` without `SERVICE_PATH_PREFIX`.
 
+**Important:** On Vercel, do **not** set `NEXT_PUBLIC_API_URL` to `localhost`. Add `GEMINI_API_KEY` in the Vercel dashboard (Environment Variables). The frontend auto-routes to `/api/backend` in production.
+
 ## Stack
 
 - Frontend: Next.js, React, Tailwind

@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "backend/app/main.py": {
+    "backend/index.py": {
       "maxDuration": 60
     }
   },
@@ -12,7 +12,7 @@
     },
     "backend": {
       "root": "backend",
-      "entrypoint": "app.main:app",
+      "entrypoint": "index:app",
       "framework": "fastapi"
     }
   },
