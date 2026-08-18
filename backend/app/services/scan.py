@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -215,43 +216,73 @@ def _parse_vision_payload(content: str) -> tuple[list[RawDetected], str | None]:
     return detected, data.get("formation")
 
 
-def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | None]:
-    if not settings.gemini_api_key:
-        return [], None
+def _gemini_request(image: Image.Image, api_key: str, model: str) -> tuple[list[RawDetected], str | None]:
     from app.services.http import http_post
 
     b64 = _image_to_b64(image)
-    model = settings.gemini_vision_model or "gemini-2.0-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-
-    response = http_post(
-        url,
-        headers={"x-goog-api-key": settings.gemini_api_key, "Content-Type": "application/json"},
-        json={
-            "contents": [
-                {
-                    "parts": [
-                        {"text": SCAN_PROMPT},
-                        {"inline_data": {"mime_type": "image/jpeg", "data": b64}},
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "temperature": 0.1,
-            },
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": SCAN_PROMPT},
+                    {"inline_data": {"mime_type": "image/jpeg", "data": b64}},
+                ]
+            }
+        ],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0.1,
         },
-        timeout=60.0,
+    }
+
+    auth_attempts: list[tuple[dict[str, str], dict[str, str] | None]] = [
+        ({"x-goog-api-key": api_key, "Content-Type": "application/json"}, None),
+        ({"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, None),
+        ({"Content-Type": "application/json"}, {"key": api_key}),
+    ]
+
+    last_error = "unknown error"
+    for headers, params in auth_attempts:
+        try:
+            response = http_post(url, headers=headers, json=payload, params=params, timeout=60.0)
+            body = response.json()
+            candidates = body.get("candidates") or []
+            if not candidates:
+                last_error = "Gemini returned no candidates"
+                continue
+            parts = candidates[0].get("content", {}).get("parts") or []
+            if not parts:
+                last_error = "Gemini returned empty content"
+                continue
+            text = parts[0].get("text", "")
+            return _parse_vision_payload(text)
+        except RuntimeError as exc:
+            last_error = str(exc)
+            continue
+
+    raise RuntimeError(last_error)
+
+
+def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | None]:
+    if not settings.gemini_api_key:
+        return [], None
+
+    models = [settings.gemini_vision_model or "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]
+    seen: set[str] = set()
+    last_error = "Gemini request failed"
+    for model in models:
+        if model in seen:
+            continue
+        seen.add(model)
+        try:
+            return _gemini_request(image, settings.gemini_api_key, model)
+        except RuntimeError as exc:
+            last_error = str(exc)
+
+    raise RuntimeError(
+        f"{last_error}. Use a valid API key from https://aistudio.google.com/apikey (starts with AIza)."
     )
-    body = response.json()
-    candidates = body.get("candidates") or []
-    if not candidates:
-        raise RuntimeError("Gemini returned no candidates")
-    parts = candidates[0].get("content", {}).get("parts") or []
-    if not parts:
-        raise RuntimeError("Gemini returned empty content")
-    text = parts[0].get("text", "")
-    return _parse_vision_payload(text)
 
 
 def _detect_with_openai(image: Image.Image) -> tuple[list[RawDetected], str | None]:
@@ -336,6 +367,7 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
 
     raw_detected: list[RawDetected] = []
     scan_method = "ocr"
+    vision_errors: list[str] = []
 
     if settings.gemini_api_key:
         try:
@@ -343,9 +375,9 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
             if raw_detected:
                 scan_method = "gemini"
             else:
-                warnings.append("Gemini returned no players; trying fallback.")
+                vision_errors.append("Gemini returned no players.")
         except Exception as exc:
-            warnings.append(f"Gemini scan failed: {exc}")
+            vision_errors.append(f"Gemini: {exc}")
 
     if not raw_detected and settings.openai_api_key:
         try:
@@ -353,28 +385,23 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
             if raw_detected:
                 scan_method = "openai"
             else:
-                warnings.append("OpenAI returned no players; trying OCR fallback.")
+                vision_errors.append("OpenAI returned no players.")
         except Exception as exc:
-            warnings.append(f"OpenAI scan failed: {exc}")
+            vision_errors.append(f"OpenAI: {exc}")
 
     if not raw_detected:
         if not settings.gemini_api_key and not settings.openai_api_key:
             raise RuntimeError(
-                "Vision scan is not configured. Add GEMINI_API_KEY in your host's environment "
-                "(Vercel → Project → Settings → Environment Variables), then redeploy."
+                "Vision scan is not configured. Add GEMINI_API_KEY in Vercel → Settings → Environment Variables."
             )
+        if os.getenv("VERCEL") or vision_errors:
+            detail = " ".join(vision_errors) if vision_errors else "Vision scan returned no players."
+            raise RuntimeError(detail)
         try:
             raw_detected = _detect_with_ocr(image)
             scan_method = "ocr"
         except Exception as exc:
-            detail = str(exc)
-            if settings.gemini_api_key or settings.openai_api_key:
-                raise RuntimeError(
-                    f"Scan failed after vision attempt. {detail}"
-                ) from exc
-            raise RuntimeError(
-                "Scan failed. Set GEMINI_API_KEY for vision scan, or install tesseract for OCR."
-            ) from exc
+            raise RuntimeError(f"Scan failed. {exc}") from exc
 
     starters: list[dict[str, Any]] = []
     bench: list[dict[str, Any]] = []
