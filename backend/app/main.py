@@ -7,6 +7,7 @@ from app.api.routes import router
 from app.config import settings
 from app.db.models import Base  # noqa: F401
 from app.db.session import engine
+from app.middleware.service_prefix import ServicePrefixMiddleware
 
 
 @asynccontextmanager
@@ -21,6 +22,9 @@ app = FastAPI(
     description="Data → ML predictions → optimization → AI explanation",
     lifespan=lifespan,
 )
+
+if settings.service_path_prefix:
+    app.add_middleware(ServicePrefixMiddleware, prefix=settings.service_path_prefix)
 
 app.add_middleware(
     CORSMiddleware,

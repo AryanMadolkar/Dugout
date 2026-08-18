@@ -1,7 +1,17 @@
 import type { Fixture, IngestResult, Overview, Player } from "./types";
 import type { SavedSquad, SquadPlayer } from "./dashboard-data";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+function apiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+  }
+  if (process.env.VERCEL) {
+    return "/api/backend";
+  }
+  return "http://localhost:8000";
+}
+
+const API_URL = apiBaseUrl();
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, { cache: "no-store" });

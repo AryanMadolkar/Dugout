@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     fpl_api_base: str = "https://fantasy.premierleague.com/api"
     cors_origins: str = "http://localhost:3000"
+    service_path_prefix: str = ""
+    gemini_api_key: str = ""
+    gemini_vision_model: str = "gemini-2.0-flash"
     openai_api_key: str = ""
     openai_vision_model: str = "gpt-4o-mini"
 

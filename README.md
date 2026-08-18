@@ -13,7 +13,7 @@ The PRD’s recommended order, in slices you can run and inspect:
 | 0 | Repo, Next.js + FastAPI, Postgres | In progress |
 | 1 | FPL data ingestion + normalized DB + explorer UI | In progress |
 | 2 | Player projection baseline (start heuristic, then LightGBM) | Next |
-| 3 | Screenshot squad scanner + confirm UI | Later |
+| 3 | Screenshot squad scanner + confirm UI | Done |
 | 4 | Transfer / captain / chip optimizer (OR-Tools) | Later |
 | 5 | Recommendation dashboard + team rating + potential picks | Later |
 | 6 | LLM explanation + What-If | Later |
@@ -42,6 +42,24 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000). Use **Sync FPL data** if the database is empty.
 
 API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+## Deploy on Vercel (Services)
+
+Set the Vercel project **Framework Preset** to **Services**. Root `vercel.json` defines:
+
+- **frontend** — Next.js at `/`
+- **backend** — FastAPI at `/api/backend`
+
+On Vercel, set environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `SERVICE_PATH_PREFIX` | `/api/backend` |
+| `NEXT_PUBLIC_API_URL` | `/api/backend` |
+| `GEMINI_API_KEY` | your key |
+| `DATABASE_URL` | Postgres URL (SQLite does not persist on serverless) |
+
+Local dev is unchanged: run backend on `:8000` and frontend on `:3000` without `SERVICE_PATH_PREFIX`.
 
 ## Stack
 

@@ -157,11 +157,37 @@ def enrich_player(
     }
 
 
-def _parse_vision_json(content: str) -> list[RawDetected]:
+SCAN_PROMPT = """Extract ONLY players visible in this Fantasy Premier League squad screenshot.
+Return strict JSON, no markdown:
+{
+  "formation": "3-4-3",
+  "starters": [{"name": "exact FPL web name as shown", "row": "GKP|DEF|MID|FWD", "is_captain": false, "is_vice": false, "confidence": 0.0-1.0}],
+  "bench": [{"name": "exact name", "row": "GKP|DEF|MID|FWD", "confidence": 0.0-1.0}]
+}
+Rules:
+- Include ONLY players clearly shown in the screenshot (starting XI + bench, max 15).
+- Do NOT invent players not visible.
+- Use FPL-style short names (e.g. Haaland, M.Salah, Gabriel).
+- Mark captain/vice if armband visible (C/V).
+- bench = substitute row below the pitch."""
+
+
+def _clean_json_text(content: str) -> str:
     text = content.strip()
     if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?", "", text).strip()
-        text = re.sub(r"```$", "", text).strip()
+        text = re.sub(r"^```(?:json)?\s*", "", text).strip()
+        text = re.sub(r"\s*```$", "", text).strip()
+    return text
+
+
+def _image_to_b64(image: Image.Image) -> str:
+    buf = io.BytesIO()
+    image.convert("RGB").save(buf, format="JPEG", quality=90)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def _parse_vision_payload(content: str) -> tuple[list[RawDetected], str | None]:
+    text = _clean_json_text(content)
     data = json.loads(text)
     detected: list[RawDetected] = []
     for item in data.get("starters", []):
@@ -186,7 +212,47 @@ def _parse_vision_json(content: str) -> list[RawDetected]:
                 confidence=float(item.get("confidence", 0.8)),
             )
         )
-    return detected
+    return detected, data.get("formation")
+
+
+def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | None]:
+    if not settings.gemini_api_key:
+        return [], None
+    import httpx
+
+    b64 = _image_to_b64(image)
+    model = settings.gemini_vision_model
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+    response = httpx.post(
+        url,
+        params={"key": settings.gemini_api_key},
+        json={
+            "contents": [
+                {
+                    "parts": [
+                        {"text": SCAN_PROMPT},
+                        {"inline_data": {"mime_type": "image/jpeg", "data": b64}},
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "temperature": 0.1,
+            },
+        },
+        timeout=60.0,
+    )
+    response.raise_for_status()
+    body = response.json()
+    candidates = body.get("candidates") or []
+    if not candidates:
+        raise RuntimeError("Gemini returned no candidates")
+    parts = candidates[0].get("content", {}).get("parts") or []
+    if not parts:
+        raise RuntimeError("Gemini returned empty content")
+    text = parts[0].get("text", "")
+    return _parse_vision_payload(text)
 
 
 def _detect_with_openai(image: Image.Image) -> tuple[list[RawDetected], str | None]:
@@ -194,23 +260,7 @@ def _detect_with_openai(image: Image.Image) -> tuple[list[RawDetected], str | No
         return [], None
     import httpx
 
-    buf = io.BytesIO()
-    image.convert("RGB").save(buf, format="JPEG", quality=90)
-    b64 = base64.b64encode(buf.getvalue()).decode()
-
-    prompt = """Extract ONLY players visible in this Fantasy Premier League squad screenshot.
-Return strict JSON, no markdown:
-{
-  "formation": "3-4-3",
-  "starters": [{"name": "exact FPL web name as shown", "row": "GKP|DEF|MID|FWD", "is_captain": false, "is_vice": false, "confidence": 0.0-1.0}],
-  "bench": [{"name": "exact name", "row": "GKP|DEF|MID|FWD", "confidence": 0.0-1.0}]
-}
-Rules:
-- Include ONLY players clearly shown in the screenshot (starting XI + bench, max 15).
-- Do NOT invent players not visible.
-- Use FPL-style short names (e.g. Haaland, M.Salah, Gabriel).
-- Mark captain/vice if armband visible (C/V).
-- bench = substitute row below the pitch."""
+    b64 = _image_to_b64(image)
 
     response = httpx.post(
         "https://api.openai.com/v1/chat/completions",
@@ -221,7 +271,7 @@ Rules:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": prompt},
+                        {"type": "text", "text": SCAN_PROMPT},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                     ],
                 }
@@ -232,14 +282,7 @@ Rules:
     )
     response.raise_for_status()
     content = response.json()["choices"][0]["message"]["content"]
-    text = content.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text).strip()
-        text = re.sub(r"\s*```$", "", text).strip()
-    parsed = json.loads(text)
-    formation = parsed.get("formation")
-    detected = _parse_vision_json(text)
-    return detected, formation
+    return _parse_vision_payload(content)
 
 
 def _detect_with_ocr(image: Image.Image) -> list[RawDetected]:
@@ -294,20 +337,35 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
     unmatched: list[str] = []
 
     raw_detected: list[RawDetected] = []
-    if settings.openai_api_key:
+    scan_method = "ocr"
+
+    if settings.gemini_api_key:
+        try:
+            raw_detected, formation = _detect_with_gemini(image)
+            if raw_detected:
+                scan_method = "gemini"
+            else:
+                warnings.append("Gemini returned no players; trying fallback.")
+        except Exception as exc:
+            warnings.append(f"Gemini scan failed: {exc}")
+
+    if not raw_detected and settings.openai_api_key:
         try:
             raw_detected, formation = _detect_with_openai(image)
-            if not raw_detected:
-                warnings.append("Vision model returned no players; trying OCR fallback.")
+            if raw_detected:
+                scan_method = "openai"
+            else:
+                warnings.append("OpenAI returned no players; trying OCR fallback.")
         except Exception as exc:
-            warnings.append(f"Vision scan failed: {exc}")
+            warnings.append(f"OpenAI scan failed: {exc}")
 
     if not raw_detected:
         try:
             raw_detected = _detect_with_ocr(image)
+            scan_method = "ocr"
         except Exception as exc:
             raise RuntimeError(
-                "Scan failed. Set OPENAI_API_KEY for vision scan, or install tesseract for OCR."
+                "Scan failed. Set GEMINI_API_KEY for vision scan, or install tesseract for OCR."
             ) from exc
 
     starters: list[dict[str, Any]] = []
@@ -358,7 +416,7 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
         "bench": bench,
         "unmatched": unmatched,
         "warnings": warnings,
-        "scanMethod": "openai" if settings.openai_api_key else "ocr",
+        "scanMethod": scan_method,
     }
 
 
