@@ -12,7 +12,11 @@ from app.middleware.service_prefix import ServicePrefixMiddleware
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception:
+        # Serverless filesystem may be read-only outside /tmp; routes still load.
+        pass
     yield
 
 

@@ -1,3 +1,6 @@
+import os
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,9 +21,23 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_vision_model: str = "gpt-4o-mini"
 
+    @model_validator(mode="after")
+    def apply_vercel_defaults(self) -> "Settings":
+        if not os.getenv("VERCEL"):
+            return self
+        if self.database_url in ("", "sqlite:///./aifpl.db"):
+            self.database_url = "sqlite:////tmp/aifpl.db"
+        if not self.service_path_prefix:
+            self.service_path_prefix = "/api/backend"
+        return self
+
     @property
     def cors_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        vercel_url = os.getenv("VERCEL_URL")
+        if vercel_url:
+            origins.append(f"https://{vercel_url}")
+        return origins
 
 
 settings = Settings()

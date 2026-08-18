@@ -1,20 +1,24 @@
 import type { Fixture, IngestResult, Overview, Player } from "./types";
 import type { SavedSquad, SquadPlayer } from "./dashboard-data";
 
-function apiBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
-  }
-  if (process.env.VERCEL) {
+/** Resolve API base at call time — VERCEL is not available in the browser bundle. */
+export function getApiUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+
+  if (typeof window !== "undefined") {
+    const isLocal =
+      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    if (isLocal) return envUrl || "http://localhost:8000";
+    if (envUrl && !envUrl.includes("localhost")) return envUrl;
     return "/api/backend";
   }
-  return "http://localhost:8000";
+
+  if (envUrl && !envUrl.includes("localhost")) return envUrl;
+  return envUrl || "/api/backend";
 }
 
-const API_URL = apiBaseUrl();
-
 async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, { cache: "no-store" });
+  const response = await fetch(`${getApiUrl()}${path}`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`API ${path} failed (${response.status})`);
   }
@@ -41,7 +45,7 @@ export function fetchFixtures(event?: number) {
 }
 
 export async function triggerIngest(): Promise<IngestResult> {
-  const response = await fetch(`${API_URL}/api/ingest`, { method: "POST" });
+  const response = await fetch(`${getApiUrl()}/api/ingest`, { method: "POST" });
   if (!response.ok) {
     const body = await response.text();
     throw new Error(body || `Ingest failed (${response.status})`);
@@ -86,7 +90,12 @@ function mapScanPlayer(raw: Record<string, unknown>): SquadPlayer {
 export async function scanSquadImage(file: File): Promise<ScanApiResult> {
   const form = new FormData();
   form.append("file", file);
-  const response = await fetch(`${API_URL}/api/scan`, { method: "POST", body: form });
+  let response: Response;
+  try {
+    response = await fetch(`${getApiUrl()}/api/scan`, { method: "POST", body: form });
+  } catch {
+    throw new Error("Could not reach the API. Check that the backend is deployed and try again.");
+  }
   if (!response.ok) {
     let detail = `Scan failed (${response.status})`;
     try {
