@@ -45,7 +45,11 @@ API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ## Deploy on Vercel (Services)
 
-Set the Vercel project **Framework Preset** to **Services**. Root `vercel.json` defines:
+### 1. Set Framework Preset to **Services**
+In Vercel → your project → **Settings → Build and Deployment → Framework Preset**, choose **Services**.  
+Without this, Vercel ignores `vercel.json` services and the GitHub check fails with no obvious new deployment.
+
+### 2. `vercel.json` routing
 
 - **frontend** — Next.js at `/`
 - **backend** — FastAPI at `/api/backend`
@@ -62,6 +66,8 @@ On Vercel, set environment variables:
 Local dev is unchanged: run backend on `:8000` and frontend on `:3000` without `SERVICE_PATH_PREFIX`.
 
 **Important:** On Vercel, do **not** set `NEXT_PUBLIC_API_URL` to `localhost`. Add `GEMINI_API_KEY` in the Vercel dashboard (Environment Variables). The frontend auto-routes to `/api/backend` in production.
+
+If GitHub shows **Vercel — Deployment failed** but you see no new deployment, check **Deployments → Failed** in the Vercel dashboard — config errors often fail before a successful deploy is created.
 
 ## Stack
 
