@@ -293,14 +293,20 @@ def player_history(player_id: int, db: Session = Depends(get_db)) -> PlayerHisto
 def list_fixtures(
     db: Session = Depends(get_db),
     event: int | None = Query(default=None),
+    upcoming: int | None = Query(default=None, ge=1, le=8),
 ) -> list[FixtureOut]:
     _ensure_bootstrap(db)
     stmt = (
         select(Fixture)
         .options(joinedload(Fixture.team_h), joinedload(Fixture.team_a))
-        .order_by(Fixture.kickoff_time.nulls_last(), Fixture.id)
+        .order_by(Fixture.event.nulls_last(), Fixture.kickoff_time.nulls_last(), Fixture.id)
     )
-    if event is not None:
+    if upcoming is not None:
+        gw = current_gameweek(db)
+        start = gw.id if gw else 1
+        events = list(range(start, start + upcoming))
+        stmt = stmt.where(Fixture.event.in_(events))
+    elif event is not None:
         stmt = stmt.where(Fixture.event == event)
     else:
         gw = current_gameweek(db)

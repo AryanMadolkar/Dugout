@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchFixtures, fetchOverview, fetchTeams, triggerIngest, type Team } from "@/lib/api";
+import { fetchFixtures, fetchOverview, fetchTeams, fetchUpcomingFixtures, triggerIngest, type Team } from "@/lib/api";
 import type { Fixture } from "@/lib/types";
 import { SectionHead } from "./ui/SectionHead";
 
@@ -23,44 +23,43 @@ function fdrCell(fdr: number) {
   return "bg-[var(--fdr-hard)] text-[var(--coral-dark)]";
 }
 
-function clubsFromFixtures(batches: Fixture[][]): string[] {
+function clubsFromFixtures(fixtures: Fixture[]): string[] {
   const set = new Set<string>();
-  for (const fixtures of batches) {
-    for (const f of fixtures) {
-      if (f.team_h_short) set.add(f.team_h_short);
-      if (f.team_a_short) set.add(f.team_a_short);
-    }
+  for (const f of fixtures) {
+    if (f.team_h_short) set.add(f.team_h_short);
+    if (f.team_a_short) set.add(f.team_a_short);
   }
   return [...set].sort((a, b) => a.localeCompare(b));
 }
 
-function buildRows(clubs: string[], fixturesByGw: Fixture[][]): WatchRow[] {
+function buildRows(clubs: string[], gwIds: number[], fixtures: Fixture[]): WatchRow[] {
+  const indexByGw = new Map(gwIds.map((id, i) => [id, i]));
   const byClub: Record<string, Cell[]> = {};
   for (const club of clubs) {
-    byClub[club] = fixturesByGw.map(() => null);
+    byClub[club] = gwIds.map(() => null);
   }
 
-  fixturesByGw.forEach((fixtures, gwIndex) => {
-    for (const f of fixtures) {
-      const home = f.team_h_short;
-      const away = f.team_a_short;
-      if (!home || !away) continue;
-      if (byClub[home]) {
-        byClub[home][gwIndex] = {
-          opp: away,
-          home: true,
-          fdr: f.team_h_difficulty ?? 3,
-        };
-      }
-      if (byClub[away]) {
-        byClub[away][gwIndex] = {
-          opp: home,
-          home: false,
-          fdr: f.team_a_difficulty ?? 3,
-        };
-      }
+  for (const f of fixtures) {
+    const gwIndex = f.event != null ? indexByGw.get(f.event) : undefined;
+    if (gwIndex == null) continue;
+    const home = f.team_h_short;
+    const away = f.team_a_short;
+    if (!home || !away) continue;
+    if (byClub[home]) {
+      byClub[home][gwIndex] = {
+        opp: away,
+        home: true,
+        fdr: f.team_h_difficulty ?? 3,
+      };
     }
-  });
+    if (byClub[away]) {
+      byClub[away][gwIndex] = {
+        opp: home,
+        home: false,
+        fdr: f.team_a_difficulty ?? 3,
+      };
+    }
+  }
 
   return clubs.map((club) => ({ club, cells: byClub[club] ?? [] }));
 }
@@ -70,31 +69,38 @@ async function loadWatchData(): Promise<{ rows: WatchRow[]; gwLabels: string[] }
   let teams: Team[] = await fetchTeams().catch(() => []);
   let startGw = overview.current_gameweek?.id ?? 1;
   let gwIds = [startGw, startGw + 1, startGw + 2];
-  let fixtureBatches = await Promise.all(gwIds.map((id) => fetchFixtures(id).catch(() => [] as Fixture[])));
+  let fixtures = await fetchUpcomingFixtures(3).catch(() => [] as Fixture[]);
 
-  const empty =
-    teams.length === 0 && fixtureBatches.every((b) => b.length === 0);
-
-  if (empty) {
+  if (teams.length === 0 && fixtures.length === 0) {
     try {
       await triggerIngest();
     } catch {
-      /* ignore — retry reads anyway */
+      /* ignore */
     }
     overview = await fetchOverview();
     teams = await fetchTeams().catch(() => []);
     startGw = overview.current_gameweek?.id ?? 1;
     gwIds = [startGw, startGw + 1, startGw + 2];
-    fixtureBatches = await Promise.all(gwIds.map((id) => fetchFixtures(id).catch(() => [] as Fixture[])));
+    fixtures = await fetchUpcomingFixtures(3).catch(() => [] as Fixture[]);
+  }
+
+  // If a single GW is missing from the batch (rare), fill from event filter.
+  const present = new Set(fixtures.map((f) => f.event).filter((e): e is number => e != null));
+  if (fixtures.length > 0) {
+    for (const id of gwIds) {
+      if (present.has(id)) continue;
+      const extra = await fetchFixtures(id).catch(() => [] as Fixture[]);
+      fixtures = fixtures.concat(extra);
+    }
   }
 
   const clubs =
     teams.length > 0
       ? teams.map((t) => t.short_name).filter(Boolean).sort((a, b) => a.localeCompare(b))
-      : clubsFromFixtures(fixtureBatches);
+      : clubsFromFixtures(fixtures);
 
   return {
-    rows: buildRows(clubs, fixtureBatches),
+    rows: buildRows(clubs, gwIds, fixtures),
     gwLabels: gwIds.map((id) => `GW${id}`),
   };
 }
@@ -170,7 +176,7 @@ export function FixtureWatchPanel() {
                             {cell.home ? `${cell.opp} (H)` : `${cell.opp} (A)`}
                           </span>
                         ) : (
-                          <span className="inline-block min-w-[2.75rem] rounded bg-[var(--canvas)] px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]">
+                          <span className="inline-block min-w-[3.5rem] rounded bg-[var(--canvas)] px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]">
                             —
                           </span>
                         )}

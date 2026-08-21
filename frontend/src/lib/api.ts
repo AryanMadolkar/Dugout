@@ -49,6 +49,11 @@ export function fetchFixtures(event?: number) {
   return getJson<Fixture[]>(`/api/fixtures${qs}`);
 }
 
+/** Next N gameweeks of fixtures in one request (avoids empty columns on cold Vercel instances). */
+export function fetchUpcomingFixtures(count = 3) {
+  return getJson<Fixture[]>(`/api/fixtures?upcoming=${count}`);
+}
+
 export type Team = {
   id: number;
   name: string;
