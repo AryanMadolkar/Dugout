@@ -25,7 +25,7 @@ export function BenchStrip({ bench }: Props) {
       />
       {/* FPL-style bench strip — dark bar with shirts */}
       <div
-        className="flex items-start justify-around gap-1 px-3 py-4 sm:gap-2 sm:px-4"
+        className="flex flex-wrap items-start justify-around gap-2 px-3 py-4 sm:gap-3 sm:px-4"
         style={{ background: "linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%)" }}
       >
         {bench.map((player, i) => (

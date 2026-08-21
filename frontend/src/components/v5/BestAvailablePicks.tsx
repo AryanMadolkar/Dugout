@@ -59,43 +59,50 @@ type Props = {
 };
 
 export function BestAvailablePicks({ fullPage }: Props) {
-  const { openModal } = useDashboard();
+  const { openModal, allPlayers } = useDashboard();
   const [position, setPosition] = useState<(typeof POSITIONS)[number]>("All");
   const [sort, setSort] = useState<(typeof SORTS)[number]>("xPts");
   const [picks, setPicks] = useState<AvailablePick[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const ownedIds = useMemo(
+    () => new Set(allPlayers.map((p) => p.fplId).filter((id): id is number => id != null).map(String)),
+    [allPlayers],
+  );
+
   useEffect(() => {
     setLoading(true);
-    fetchPlayers({ sort: sort === "Form" ? "form" : sort === "Ownership" ? "selected" : "ep_next", limit: 50 })
+    fetchPlayers({ sort: sort === "Form" ? "form" : sort === "Ownership" ? "selected" : "ep_next", limit: 100 })
       .then((players) => {
         setPicks(
-          players.map((p) => {
-            const ep = p.ep_next ?? p.points_per_game ?? 0;
-            const form = p.form ?? 0;
-            const ownership = p.selected_by_percent ?? 0;
-            return {
-              id: String(p.id),
-              name: p.web_name,
-              club: p.team_short_name ?? "?",
-              clubColor: CLUB_COLORS[p.team_short_name ?? ""] ?? "#888888",
-              position: p.position as AvailablePick["position"],
-              price: p.price,
-              form,
-              ownership,
-              nextFixtures: [],
-              next4Xp: ep * 4,
-              rating: Math.round(Math.min(99, ep * 8 + form * 5)),
-              tag: pickTag(ownership, form),
-            };
-          }),
+          players
+            .filter((p) => !ownedIds.has(String(p.id)))
+            .map((p) => {
+              const ep = p.ep_next ?? p.points_per_game ?? 0;
+              const form = p.form ?? 0;
+              const ownership = p.selected_by_percent ?? 0;
+              return {
+                id: String(p.id),
+                name: p.web_name,
+                club: p.team_short_name ?? "?",
+                clubColor: CLUB_COLORS[p.team_short_name ?? ""] ?? "#888888",
+                position: p.position as AvailablePick["position"],
+                price: p.price,
+                form,
+                ownership,
+                nextFixtures: [],
+                next4Xp: ep * 4,
+                rating: Math.round(Math.min(99, ep * 8 + form * 5 + (ep > 0 ? 20 : 0))),
+                tag: pickTag(ownership, form),
+              };
+            }),
         );
         setError(null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load players"))
       .finally(() => setLoading(false));
-  }, [sort]);
+  }, [sort, ownedIds]);
 
   const filtered = useMemo(() => {
     const pos = POSITION_MAP[position];
@@ -106,7 +113,7 @@ export function BestAvailablePicks({ fullPage }: Props) {
   return (
     <section className="panel-elevated overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--navy)] px-4 py-3">
-        <h2 className="font-label text-[12px] font-bold text-white">Best available picks</h2>
+        <h2 className="font-label text-[12px] font-bold text-white">Best picks according to AI</h2>
         <div className="flex flex-wrap gap-1">
           {POSITIONS.map((p) => (
             <button
@@ -161,7 +168,9 @@ export function BestAvailablePicks({ fullPage }: Props) {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-secondary)]">
-                    No players match this filter.
+                    {error
+                      ? error
+                      : "No FPL player data loaded yet. Sync FPL data on the backend, or check your API connection."}
                   </td>
                 </tr>
               ) : (

@@ -49,6 +49,30 @@ export function fetchFixtures(event?: number) {
   return getJson<Fixture[]>(`/api/fixtures${qs}`);
 }
 
+export type PlayerHistoryGw = {
+  round: number;
+  total_points: number;
+  minutes: number;
+  goals_scored: number;
+  assists: number;
+  clean_sheets: number;
+  bonus: number;
+  was_home: boolean | null;
+  opponent_team: number | null;
+};
+
+export type PlayerHistory = {
+  player_id: number;
+  form: number;
+  games_used: number;
+  season_points: number;
+  history: PlayerHistoryGw[];
+};
+
+export function fetchPlayerHistory(playerId: number) {
+  return getJson<PlayerHistory>(`/api/players/${playerId}/history`);
+}
+
 export async function triggerIngest(): Promise<IngestResult> {
   const response = await fetch(`${getApiUrl()}/api/ingest`, { method: "POST" });
   if (!response.ok) {
@@ -81,6 +105,7 @@ function mapScanPlayer(raw: Record<string, unknown>): SquadPlayer {
     home: Boolean(raw.home),
     xp: Number(raw.xp),
     form: Number(raw.form),
+    ppg: raw.ppg != null ? Number(raw.ppg) : undefined,
     ownership: Number(raw.ownership),
     isCaptain: Boolean(raw.isCaptain),
     isVice: Boolean(raw.isVice),

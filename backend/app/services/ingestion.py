@@ -180,7 +180,16 @@ def sync_bootstrap_and_fixtures(db: Session, client: FPLClient | None = None) ->
 
 
 def current_gameweek(db: Session) -> Gameweek | None:
+    """Prefer the live / upcoming GW (is_next, else unfinished current, else next unfinished)."""
+    nxt = db.scalar(select(Gameweek).where(Gameweek.is_next.is_(True)))
+    if nxt:
+        return nxt
     current = db.scalar(select(Gameweek).where(Gameweek.is_current.is_(True)))
-    if current:
+    if current and not current.finished:
         return current
-    return db.scalar(select(Gameweek).where(Gameweek.is_next.is_(True)))
+    unfinished = db.scalar(
+        select(Gameweek).where(Gameweek.finished.is_(False)).order_by(Gameweek.id).limit(1)
+    )
+    if unfinished:
+        return unfinished
+    return current or db.scalar(select(Gameweek).order_by(Gameweek.id.desc()).limit(1))

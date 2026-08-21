@@ -13,6 +13,8 @@ export type SquadPlayer = {
   xp: number;
   form: number;
   ownership: number;
+  /** FPL points_per_game — used when form is empty */
+  ppg?: number;
   isCaptain?: boolean;
   isVice?: boolean;
   state?: PlayerState;
@@ -24,13 +26,28 @@ export type SquadPlayer = {
   fplId?: number;
 };
 
+export type ChipName = "Wildcard" | "Free Hit" | "Bench Boost" | "Triple Captain";
+
+export type ChipAvailability = "available" | "used" | "unknown";
+
+export type ChipUsageMap = Record<ChipName, ChipAvailability>;
+
 export type ChipState = {
-  name: "Wildcard" | "Free Hit" | "Bench Boost" | "Triple Captain";
+  name: ChipName;
   available: boolean;
   recommended: boolean;
   valueNow: number;
   valueOptimal: number;
   optimalWindow: string;
+};
+
+export const CHIP_NAMES: ChipName[] = ["Wildcard", "Free Hit", "Bench Boost", "Triple Captain"];
+
+export const DEFAULT_CHIP_USAGE: ChipUsageMap = {
+  Wildcard: "unknown",
+  "Free Hit": "unknown",
+  "Bench Boost": "unknown",
+  "Triple Captain": "unknown",
 };
 
 export type PickTag = "RECOMMENDED" | "DIFFERENTIAL" | "VALUE" | "MUST HAVE" | "FIXTURE SWING";

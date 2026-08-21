@@ -49,13 +49,13 @@ export function PitchView({ squad }: Props) {
         <div className="pointer-events-none absolute bottom-[11%] left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-white/40" />
 
         {/* Formation rows — FPL spacing */}
-        <div className="relative flex h-full min-h-[440px] flex-col justify-between py-2">
+        <div className="relative flex h-full min-h-[440px] flex-col justify-between gap-2 py-2 sm:gap-3">
           {ROWS.map((row) => {
             const players = squad.filter((p) => p.row === row);
             return (
               <div
                 key={row}
-                className="flex items-end justify-center gap-1 sm:gap-3"
+                className="flex flex-wrap items-end justify-center gap-2 sm:gap-3"
                 style={{ flex: row === "GKP" ? "0 0 auto" : "1 1 0" }}
               >
                 {players.map((player) => (

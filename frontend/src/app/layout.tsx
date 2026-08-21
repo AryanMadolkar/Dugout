@@ -16,7 +16,7 @@ const robotoCondensed = Roboto_Condensed({
 });
 
 export const metadata: Metadata = {
-  title: "AI FPL Manager",
+  title: "Dugout",
   description: "FPL decision support — transfer, captain, chip recommendations",
 };
 

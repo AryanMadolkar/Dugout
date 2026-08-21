@@ -1,7 +1,10 @@
-import type { SavedSquad, SquadPlayer } from "./dashboard-data";
+import type { ChipUsageMap, SavedSquad, SquadPlayer } from "./dashboard-data";
+import { DEFAULT_CHIP_USAGE } from "./dashboard-data";
+import { estimateSquadXp } from "./projections";
 
 const SQUAD_KEY = "fpl-scanned-squad";
 const PENDING_KEY = "fpl-pending-scan";
+const CHIPS_KEY = "fpl-chip-usage";
 
 export type PendingScan = SavedSquad & {
   unmatched: string[];
@@ -44,11 +47,27 @@ export function clearPendingScan() {
   sessionStorage.removeItem(PENDING_KEY);
 }
 
+export function loadChipUsage(): ChipUsageMap {
+  if (typeof window === "undefined") return { ...DEFAULT_CHIP_USAGE };
+  try {
+    const raw = sessionStorage.getItem(CHIPS_KEY);
+    if (!raw) return { ...DEFAULT_CHIP_USAGE };
+    return { ...DEFAULT_CHIP_USAGE, ...(JSON.parse(raw) as Partial<ChipUsageMap>) };
+  } catch {
+    return { ...DEFAULT_CHIP_USAGE };
+  }
+}
+
+export function saveChipUsage(usage: ChipUsageMap) {
+  sessionStorage.setItem(CHIPS_KEY, JSON.stringify(usage));
+}
+
+export function clearChipUsage() {
+  sessionStorage.removeItem(CHIPS_KEY);
+}
+
 export function projectedPoints(starters: SquadPlayer[]): number {
-  return starters.reduce((sum, p) => {
-    const mult = p.isCaptain ? 2 : 1;
-    return sum + p.xp * mult;
-  }, 0);
+  return estimateSquadXp(starters);
 }
 
 export function formatScanTime(iso: string): string {

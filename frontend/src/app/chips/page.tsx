@@ -4,11 +4,17 @@ import Link from "next/link";
 import { AppLayout } from "@/components/v5/AppLayout";
 import { ChipStrategyPanel } from "@/components/v5/ChipStrategyPanel";
 import { TeamHeader } from "@/components/v5/TeamHeader";
-import { DEFAULT_CHIPS } from "@/lib/dashboard-data";
 import { useDashboard } from "@/context/DashboardContext";
+import { CHIP_NAMES } from "@/lib/dashboard-data";
+
+const STATUS_LABEL = {
+  available: "Available",
+  used: "Used",
+  unknown: "Not set",
+} as const;
 
 export default function ChipsPage() {
-  const { hasSquad } = useDashboard();
+  const { hasSquad, chipUsage, setChipAvailability } = useDashboard();
 
   return (
     <AppLayout teamHeader={hasSquad ? <TeamHeader /> : undefined}>
@@ -23,19 +29,56 @@ export default function ChipsPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <ChipStrategyPanel expanded />
         <div className="panel p-4">
-          <h2 className="font-label mb-3 text-[12px] font-bold text-[var(--text-secondary)]">Chips</h2>
+          <h2 className="font-label mb-3 text-[12px] font-bold text-[var(--text-secondary)]">Your chips</h2>
+          <p className="mb-3 text-[12px] text-[var(--text-secondary)]">
+            Tap Available or Used for each chip. This is saved for this session until FPL account linking is added.
+          </p>
           <div className="space-y-3">
-            {DEFAULT_CHIPS.map((chip) => (
-              <div key={chip.name} className="rounded-[3px] border border-[var(--border)] p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[14px] font-bold">{chip.name}</p>
-                  <span className="font-label text-[10px] font-bold text-[var(--text-secondary)]">Not linked</span>
+            {CHIP_NAMES.map((name) => {
+              const status = chipUsage[name];
+              return (
+                <div key={name} className="rounded-[3px] border border-[var(--border)] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[14px] font-bold">{name}</p>
+                    <span
+                      className={`font-label text-[10px] font-bold ${
+                        status === "used"
+                          ? "text-[var(--coral)]"
+                          : status === "available"
+                            ? "text-[var(--positive)]"
+                            : "text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      {STATUS_LABEL[status]}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setChipAvailability(name, "available")}
+                      className={`control flex-1 py-2 text-[12px] font-semibold ${
+                        status === "available"
+                          ? "bg-[var(--navy)] text-white"
+                          : "border border-[var(--border)] hover:bg-[var(--canvas)]"
+                      }`}
+                    >
+                      Available
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChipAvailability(name, "used")}
+                      className={`control flex-1 py-2 text-[12px] font-semibold ${
+                        status === "used"
+                          ? "bg-[var(--coral)] text-white"
+                          : "border border-[var(--border)] hover:bg-[var(--canvas)]"
+                      }`}
+                    >
+                      Used
+                    </button>
+                  </div>
                 </div>
-                <p className="mt-2 text-[12px] text-[var(--text-body)]">
-                  Connect your FPL team ID to read chip usage and get timing recommendations.
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

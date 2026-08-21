@@ -11,16 +11,17 @@ import { CLUB_COLORS } from "@/lib/dashboard-data";
 
 export default function UploadConfirmPage() {
   const router = useRouter();
-  const { pendingScan, updatePendingScan, confirmPendingScan } = useDashboard();
+  const { hydrated, hasSquad, pendingScan, updatePendingScan, confirmPendingScan } = useDashboard();
   const [fixId, setFixId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<SquadPlayer[]>([]);
 
+  // After confirm, pendingScan is cleared — send to home, not back to upload.
   useEffect(() => {
-    if (!pendingScan) {
-      router.replace("/upload");
-    }
-  }, [pendingScan, router]);
+    if (!hydrated) return;
+    if (pendingScan) return;
+    router.replace(hasSquad ? "/" : "/upload");
+  }, [hydrated, pendingScan, hasSquad, router]);
 
   const detected = useMemo(
     () => (pendingScan ? [...pendingScan.starters, ...pendingScan.bench] : []),
@@ -52,6 +53,7 @@ export default function UploadConfirmPage() {
             home: true,
             xp: p.ep_next ?? p.points_per_game ?? 0,
             form: p.form ?? 0,
+            ppg: p.points_per_game ?? 0,
             ownership: p.selected_by_percent ?? 0,
             row: p.position as SquadPlayer["row"],
             nextFixtures: [],
@@ -65,10 +67,12 @@ export default function UploadConfirmPage() {
     };
   }, [fixId, search]);
 
-  if (!pendingScan) {
+  if (!hydrated || !pendingScan) {
     return (
       <AppLayout>
-        <p className="text-[13px] text-[var(--text-secondary)]">Loading scan…</p>
+        <p className="text-[13px] text-[var(--text-secondary)]">
+          {hasSquad ? "Opening home…" : "Loading scan…"}
+        </p>
       </AppLayout>
     );
   }
@@ -222,13 +226,13 @@ export default function UploadConfirmPage() {
             disabled={detected.length === 0}
             onClick={() => {
               confirmPendingScan();
-              router.push("/");
+              router.replace("/");
             }}
             className={`control flex-1 bg-[var(--navy)] py-3 text-center text-[14px] font-bold text-white hover:opacity-90 ${
               detected.length === 0 ? "pointer-events-none opacity-40" : ""
             }`}
           >
-            Confirm & view squad
+            Confirm & go to home
           </button>
           <Link
             href="/upload"

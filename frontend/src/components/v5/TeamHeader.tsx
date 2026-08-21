@@ -9,11 +9,18 @@ import { formatScanTime, projectedPoints } from "@/lib/squad-storage";
 export function TeamHeader() {
   const { squad, starters } = useDashboard();
   const [gameweek, setGameweek] = useState<number | null>(null);
+  const [deadline, setDeadline] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOverview()
-      .then((o) => setGameweek(o.current_gameweek?.id ?? null))
-      .catch(() => setGameweek(null));
+      .then((o) => {
+        setGameweek(o.current_gameweek?.id ?? null);
+        setDeadline(o.current_gameweek?.deadline_time ?? null);
+      })
+      .catch(() => {
+        setGameweek(null);
+        setDeadline(null);
+      });
   }, []);
 
   if (!squad) return null;
@@ -43,6 +50,16 @@ export function TeamHeader() {
         >
           <p className="font-label text-[11px] text-[var(--positive)]">
             Projected · {gameweek ? `GW${gameweek}` : "this GW"}
+            {deadline
+              ? ` · deadline ${new Intl.DateTimeFormat("en-GB", {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                }).format(new Date(deadline))}`
+              : ""}
           </p>
           <p
             className="text-[62px] font-extrabold leading-none tracking-tighter"
@@ -55,7 +72,7 @@ export function TeamHeader() {
           >
             {projected.toFixed(1)}
           </p>
-          <p className="mt-1 text-[12px] text-[var(--text-secondary)]">expected points (XI + captain)</p>
+          <p className="mt-1 text-[12px] text-[var(--text-secondary)]">Dugout xP (XI + captain)</p>
         </div>
 
         <div className="flex flex-1 flex-col justify-center gap-4 p-5">

@@ -9,65 +9,67 @@ type Props = {
   size?: "pitch" | "bench";
 };
 
+/** Classic FPL-style shirt silhouette (wider than tall). */
 export function FplJersey({ club, clubColor, isGK, isCaptain, isVice, size = "pitch" }: Props) {
   const kit = getKit(club, clubColor);
   const chestText = kitTextColor(kit.primary);
-  const w = size === "pitch" ? 44 : 36;
-  const h = size === "pitch" ? 52 : 42;
+  const w = size === "pitch" ? 56 : 48;
+  const h = size === "pitch" ? 56 : 48;
 
   return (
-    <svg width={w} height={h} viewBox="0 0 44 52" fill="none" aria-hidden className="drop-shadow-md">
+    <svg width={w} height={h} viewBox="0 0 64 64" fill="none" aria-hidden className="drop-shadow-md">
       {/* Left sleeve */}
       <path
-        d="M6 14 L2 24 L8 26 L10 16 Z"
-        fill={kit.secondary}
+        d="M18 18 L6 22 L4 36 L16 34 L18 22 Z"
+        fill={isGK ? kit.secondary : kit.primary}
         stroke={kit.trim}
-        strokeWidth="0.5"
-        opacity={0.95}
+        strokeWidth="1"
       />
       {/* Right sleeve */}
       <path
-        d="M38 14 L42 24 L36 26 L34 16 Z"
-        fill={kit.secondary}
+        d="M46 18 L58 22 L60 36 L48 34 L46 22 Z"
+        fill={isGK ? kit.secondary : kit.primary}
         stroke={kit.trim}
-        strokeWidth="0.5"
-        opacity={0.95}
+        strokeWidth="1"
       />
       {/* Body */}
       <path
-        d="M10 12 L34 12 L36 42 L8 42 Z"
+        d="M20 16 C24 14 28 13 32 13 C36 13 40 14 44 16 L46 48 C40 51 36 52 32 52 C28 52 24 51 18 48 Z"
         fill={kit.primary}
         stroke={kit.trim}
-        strokeWidth="0.6"
+        strokeWidth="1.2"
       />
       {/* Collar */}
-      <path d="M16 12 Q22 18 28 12" stroke={kit.trim} strokeWidth="1.2" fill="none" />
-      {/* GK long sleeves */}
-      {isGK ? (
-        <>
-          <path d="M6 14 L1 28 L8 30 L10 16 Z" fill={kit.secondary} stroke={kit.trim} strokeWidth="0.4" />
-          <path d="M38 14 L43 28 L36 30 L34 16 Z" fill={kit.secondary} stroke={kit.trim} strokeWidth="0.4" />
-        </>
-      ) : null}
-      {/* Club initial on chest */}
+      <path d="M26 16 C28 22 36 22 38 16" stroke={kit.trim} strokeWidth="1.6" fill="none" />
+      <path d="M28 16 L32 22 L36 16" fill={kit.secondary} opacity={0.9} />
+      {/* Club code */}
       <text
-        x="22"
-        y="30"
+        x="32"
+        y="38"
         textAnchor="middle"
         fill={chestText}
         fontSize="11"
         fontWeight="800"
         fontFamily="var(--font-archivo), sans-serif"
-        opacity={0.85}
+        opacity={0.9}
       >
-        {club.slice(0, 1)}
+        {club.slice(0, 3)}
       </text>
-      {/* Captain armband — FPL yellow on left sleeve */}
       {isCaptain ? (
-        <rect x="3" y="20" width="7" height="4" rx="1" fill="#FFD700" stroke="#B8860B" strokeWidth="0.4" />
+        <circle cx="14" cy="28" r="7" fill="#FFD700" stroke="#B8860B" strokeWidth="1" />
+      ) : null}
+      {isCaptain ? (
+        <text x="14" y="31" textAnchor="middle" fill="#1a1a1a" fontSize="9" fontWeight="800">
+          C
+        </text>
       ) : null}
       {isVice && !isCaptain ? (
-        <rect x="3" y="20" width="7" height="4" rx="1" fill="#C0C0C0" stroke="#808080" strokeWidth="0.4" />
+        <circle cx="14" cy="28" r="7" fill="#C0C0C0" stroke="#808080" strokeWidth="1" />
+      ) : null}
+      {isVice && !isCaptain ? (
+        <text x="14" y="31" textAnchor="middle" fill="#1a1a1a" fontSize="9" fontWeight="800">
+          V
+        </text>
       ) : null}
     </svg>
   );

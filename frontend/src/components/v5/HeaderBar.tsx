@@ -4,19 +4,41 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { TAB_ROUTES, type Tab } from "@/lib/routes";
 import { fetchOverview } from "@/lib/api";
+import type { Gameweek } from "@/lib/types";
 
 type Props = {
   activeTab: Tab;
 };
 
+function formatDeadline(iso: string | null): string {
+  if (!iso) return "Deadline TBD";
+  try {
+    const d = new Date(iso);
+    return new Intl.DateTimeFormat("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZoneName: "short",
+    }).format(d);
+  } catch {
+    return "Deadline TBD";
+  }
+}
+
 export function HeaderBar({ activeTab }: Props) {
-  const [gameweek, setGameweek] = useState<string>("—");
+  const [gw, setGw] = useState<Gameweek | null>(null);
 
   useEffect(() => {
     fetchOverview()
-      .then((o) => setGameweek(o.current_gameweek ? `GW${o.current_gameweek.id}` : "—"))
-      .catch(() => setGameweek("—"));
+      .then((o) => setGw(o.current_gameweek))
+      .catch(() => setGw(null));
   }, []);
+
+  const gwLabel = gw ? `GW${gw.id}` : "—";
+  const deadlineLabel = gw ? formatDeadline(gw.deadline_time) : "Loading…";
 
   return (
     <header
@@ -35,16 +57,19 @@ export function HeaderBar({ activeTab }: Props) {
               boxShadow: "0 2px 8px rgba(232,80,60,0.4)",
             }}
           >
-            F
+            D
           </div>
           <div>
-            <span className="block text-[14px] font-extrabold tracking-tight">FPL Manager</span>
+            <span className="block text-[14px] font-extrabold tracking-tight">Dugout</span>
             <span className="font-label text-[10px] text-white/50">Decision layer</span>
           </div>
         </Link>
 
-        <div className="flex items-center gap-4">
-          <StatCell label="Gameweek" value={gameweek} className="header-stat stat-pill" />
+        <div className="flex items-center gap-3">
+          <div className="header-stat-deadline stat-pill flex flex-col items-end">
+            <span className="font-label text-[9px] text-white/45">Upcoming · {gwLabel}</span>
+            <span className="text-[12px] font-bold leading-tight">{deadlineLabel}</span>
+          </div>
           <Link href="/upload" className="control btn-coral hidden px-3 py-2 text-[11px] sm:inline-block">
             Scan squad
           </Link>
@@ -74,14 +99,5 @@ export function HeaderBar({ activeTab }: Props) {
         ))}
       </nav>
     </header>
-  );
-}
-
-function StatCell({ label, value, className = "" }: { label: string; value: string; className?: string }) {
-  return (
-    <div className={`flex flex-col items-end ${className}`}>
-      <span className="font-label text-[9px] text-white/45">{label}</span>
-      <span className="text-[13px] font-bold">{value}</span>
-    </div>
   );
 }

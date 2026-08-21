@@ -9,12 +9,15 @@ from app.api.schemas import (
     GameweekOut,
     IngestResult,
     OverviewOut,
+    PlayerHistoryGwOut,
+    PlayerHistoryOut,
     PlayerOut,
     ScanResultOut,
     TeamOut,
 )
 from app.db.models import Fixture, Gameweek, IngestRun, Player, Team
 from app.db.session import get_db
+from app.services.fpl_client import FPLClient
 from app.services.ingestion import current_gameweek, sync_bootstrap_and_fixtures
 
 router = APIRouter()
@@ -93,6 +96,15 @@ def ingest(db: Session = Depends(get_db)) -> IngestResult:
 @router.get("/overview", response_model=OverviewOut)
 def overview(db: Session = Depends(get_db)) -> OverviewOut:
     gw = current_gameweek(db)
+    # Cold start / empty DB (common on Vercel SQLite) — sync once so GW + deadline appear.
+    if gw is None:
+        try:
+            sync_bootstrap_and_fixtures(db)
+            db.commit()
+            gw = current_gameweek(db)
+        except Exception:
+            db.rollback()
+
     last = db.scalar(select(IngestRun).order_by(IngestRun.id.desc()).limit(1))
     return OverviewOut(
         current_gameweek=_gameweek_out(gw) if gw else None,
@@ -145,6 +157,62 @@ def list_players(
     }.get(sort, Player.total_points)
     stmt = stmt.order_by(sort_column.desc().nullslast()).limit(limit)
     return [_player_out(player) for player in db.scalars(stmt).unique().all()]
+
+
+@router.get("/players/{player_id}/history", response_model=PlayerHistoryOut)
+def player_history(player_id: int, db: Session = Depends(get_db)) -> PlayerHistoryOut:
+    """Last finished GWs from FPL element-summary — used for historical form."""
+    player = db.get(Player, player_id)
+    if player is None and db.scalar(select(func.count(Player.id))) == 0:
+        try:
+            sync_bootstrap_and_fixtures(db)
+            db.commit()
+            player = db.get(Player, player_id)
+        except Exception:
+            db.rollback()
+    if player is None:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    try:
+        summary = FPLClient().element_summary(player_id)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not load player history: {exc}") from exc
+
+    history_raw = summary.get("history") or []
+    # Prefer finished appearances with minutes; fall back to last entries.
+    finished = [h for h in history_raw if int(h.get("minutes") or 0) > 0]
+    recent = (finished or history_raw)[-8:]
+    rows: list[PlayerHistoryGwOut] = []
+    for h in recent:
+        rows.append(
+            PlayerHistoryGwOut(
+                round=int(h.get("round") or 0),
+                total_points=int(h.get("total_points") or 0),
+                minutes=int(h.get("minutes") or 0),
+                goals_scored=int(h.get("goals_scored") or 0),
+                assists=int(h.get("assists") or 0),
+                clean_sheets=int(h.get("clean_sheets") or 0),
+                bonus=int(h.get("bonus") or 0),
+                was_home=h.get("was_home"),
+                opponent_team=h.get("opponent_team"),
+            )
+        )
+
+    # FPL-style form ≈ average points over last up-to-5 appearances
+    form_window = [r for r in rows if r.minutes > 0][-5:]
+    if not form_window:
+        form_window = rows[-5:]
+    games_used = len(form_window)
+    form = round(sum(r.total_points for r in form_window) / games_used, 1) if games_used else float(player.form or 0)
+    season_points = int(player.total_points or sum(int(h.get("total_points") or 0) for h in history_raw))
+
+    return PlayerHistoryOut(
+        player_id=player_id,
+        form=form,
+        games_used=games_used,
+        season_points=season_points,
+        history=rows,
+    )
 
 
 @router.get("/fixtures", response_model=list[FixtureOut])

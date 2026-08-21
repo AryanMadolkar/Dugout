@@ -1,12 +1,18 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import type { SavedSquad, SquadPlayer } from "@/lib/dashboard-data";
+import type { ChipAvailability, ChipName, ChipUsageMap, SavedSquad, SquadPlayer } from "@/lib/dashboard-data";
+import { DEFAULT_CHIP_USAGE } from "@/lib/dashboard-data";
+import { fetchPlayers } from "@/lib/api";
+import type { Player } from "@/lib/types";
 import {
+  clearChipUsage,
   clearPendingScan,
   clearSquad,
+  loadChipUsage,
   loadPendingScan,
   loadSquad,
+  saveChipUsage,
   savePendingScan,
   saveSquad,
   type PendingScan,
@@ -14,12 +20,37 @@ import {
 
 type Modal = "whatIf" | "makeMove" | "fixPlayer" | null;
 
+function enrichPlayer(player: SquadPlayer, live: Player | undefined): SquadPlayer {
+  if (!live) return player;
+  return {
+    ...player,
+    xp: live.ep_next ?? live.ep_this ?? live.points_per_game ?? player.xp,
+    form: live.form ?? player.form,
+    ppg: live.points_per_game ?? player.ppg,
+    ownership: live.selected_by_percent ?? player.ownership,
+    price: live.price ?? player.price,
+  };
+}
+
+function enrichSquad(squad: SavedSquad, liveById: Map<number, Player>): SavedSquad {
+  const mapList = (list: SquadPlayer[]) =>
+    list.map((p) => enrichPlayer(p, p.fplId != null ? liveById.get(p.fplId) : undefined));
+  return {
+    ...squad,
+    starters: mapList(squad.starters),
+    bench: mapList(squad.bench),
+  };
+}
+
 type DashboardContextValue = {
+  hydrated: boolean;
   squad: SavedSquad | null;
   pendingScan: PendingScan | null;
   hasSquad: boolean;
   starters: SquadPlayer[];
   bench: SquadPlayer[];
+  chipUsage: ChipUsageMap;
+  setChipAvailability: (name: ChipName, status: ChipAvailability) => void;
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
   selectedPlayer: SquadPlayer | null;
@@ -38,6 +69,7 @@ const DashboardContext = createContext<DashboardContextValue | null>(null);
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [squad, setSquad] = useState<SavedSquad | null>(null);
   const [pendingScan, setPendingScanState] = useState<PendingScan | null>(null);
+  const [chipUsage, setChipUsage] = useState<ChipUsageMap>(DEFAULT_CHIP_USAGE);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<Modal>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -45,8 +77,31 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setSquad(loadSquad());
     setPendingScanState(loadPendingScan());
+    setChipUsage(loadChipUsage());
     setHydrated(true);
   }, []);
+
+  // Refresh FPL metrics (ep_next, form, ppg) so projections stay current after scan.
+  useEffect(() => {
+    if (!hydrated || !squad) return;
+    let cancelled = false;
+    fetchPlayers({ sort: "ep_next", limit: 500 })
+      .then((players) => {
+        if (cancelled) return;
+        const liveById = new Map(players.map((p) => [p.id, p]));
+        const next = enrichSquad(squad, liveById);
+        setSquad(next);
+        saveSquad(next);
+      })
+      .catch(() => {
+        /* keep scanned stats */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Only re-run when squad identity changes (scan confirm), not on every enrich.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, squad?.scannedAt]);
 
   const starters = squad?.starters ?? [];
   const bench = squad?.bench ?? [];
@@ -96,21 +151,34 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     setSelectedId(confirmed.starters[0]?.id ?? null);
   }, [pendingScan]);
 
+  const setChipAvailability = useCallback((name: ChipName, status: ChipAvailability) => {
+    setChipUsage((prev) => {
+      const next = { ...prev, [name]: status };
+      saveChipUsage(next);
+      return next;
+    });
+  }, []);
+
   const clearScannedSquad = useCallback(() => {
     clearSquad();
     clearPendingScan();
+    clearChipUsage();
     setSquad(null);
     setPendingScanState(null);
+    setChipUsage({ ...DEFAULT_CHIP_USAGE });
     setSelectedId(null);
   }, []);
 
   const value = useMemo(
     () => ({
+      hydrated,
       squad,
       pendingScan,
       hasSquad: starters.length > 0 || bench.length > 0,
       starters,
       bench,
+      chipUsage,
+      setChipAvailability,
       selectedId,
       setSelectedId,
       selectedPlayer,
@@ -124,10 +192,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       clearScannedSquad,
     }),
     [
+      hydrated,
       squad,
       pendingScan,
       starters,
       bench,
+      chipUsage,
+      setChipAvailability,
       selectedId,
       selectedPlayer,
       allPlayers,

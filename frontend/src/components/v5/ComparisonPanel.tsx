@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useDashboard } from "@/context/DashboardContext";
+import { estimatePlayerXp } from "@/lib/projections";
 import { SectionHead } from "./ui/SectionHead";
 
 export function ComparisonPanel() {
@@ -9,15 +10,15 @@ export function ComparisonPanel() {
 
   const comparison = useMemo(() => {
     if (starters.length < 2) return null;
-    const sorted = [...starters].sort((a, b) => b.xp - a.xp);
+    const sorted = [...starters].sort((a, b) => estimatePlayerXp(b) - estimatePlayerXp(a));
     const a = sorted[0];
     const b = sorted[1];
     return {
       playerA: a.name,
       playerB: b.name,
       metrics: [
-        { label: "xP (next GW)", a: a.xp, b: b.xp },
-        { label: "Form", a: a.form, b: b.form },
+        { label: "xP (next GW)", a: estimatePlayerXp(a), b: estimatePlayerXp(b) },
+        { label: "Form", a: a.form || a.ppg || 0, b: b.form || b.ppg || 0 },
         { label: "Ownership", a: a.ownership, b: b.ownership },
         { label: "Price", a: a.price, b: b.price },
         {

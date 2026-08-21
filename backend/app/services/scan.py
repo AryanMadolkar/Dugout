@@ -147,6 +147,7 @@ def enrich_player(
         "home": home,
         "xp": float(player.ep_next or player.points_per_game or 0),
         "form": float(player.form or 0),
+        "ppg": float(player.points_per_game or 0),
         "ownership": float(player.selected_by_percent or 0),
         "isCaptain": is_captain,
         "isVice": is_vice,

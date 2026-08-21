@@ -44,7 +44,7 @@ export default function MyTeamPage() {
 
   return (
     <AppLayout teamHeader={<TeamHeader />}>
-      <div className="dashboard-grid grid gap-4" style={{ gridTemplateColumns: "1.2fr 0.9fr 0.7fr" }}>
+      <div className="dashboard-grid grid gap-4" style={{ gridTemplateColumns: "minmax(340px, 1.4fr) minmax(280px, 1fr) minmax(240px, 0.85fr)" }}>
         <div className="space-y-4">
           <PitchView squad={starters} />
           <BenchStrip bench={bench} />

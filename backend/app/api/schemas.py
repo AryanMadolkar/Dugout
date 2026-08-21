@@ -94,6 +94,26 @@ class OverviewOut(BaseModel):
     last_ingest_status: str | None = None
 
 
+class PlayerHistoryGwOut(BaseModel):
+    round: int
+    total_points: int
+    minutes: int
+    goals_scored: int
+    assists: int
+    clean_sheets: int
+    bonus: int
+    was_home: bool | None = None
+    opponent_team: int | None = None
+
+
+class PlayerHistoryOut(BaseModel):
+    player_id: int
+    form: float
+    games_used: int
+    season_points: int
+    history: list[PlayerHistoryGwOut]
+
+
 class ScanPlayerOut(BaseModel):
     id: str
     fpl_id: int
@@ -107,6 +127,7 @@ class ScanPlayerOut(BaseModel):
     home: bool
     xp: float
     form: float
+    ppg: float = 0
     ownership: float
     isCaptain: bool = False
     isVice: bool = False
