@@ -183,7 +183,7 @@ export function FixtureWatchPanel() {
           </div>
         )}
         <p className="mt-3 text-[12px] text-[var(--text-secondary)]">
-          All Premier League clubs · opponent short name · green easy · yellow mid · red hard (@ = away).
+          All Premier League clubs · opponent short name · green easy · yellow mid · red hard.
         </p>
       </div>
     </section>
