@@ -30,6 +30,17 @@ router = APIRouter()
 POSITIONS = {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}
 
 
+def _ensure_bootstrap(db: Session) -> None:
+    """Vercel /tmp SQLite is empty per cold instance — ingest when needed."""
+    if db.scalar(select(func.count(Team.id))) and db.scalar(select(func.count(Fixture.id))):
+        return
+    try:
+        sync_bootstrap_and_fixtures(db)
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
@@ -100,6 +111,7 @@ def ingest(db: Session = Depends(get_db)) -> IngestResult:
 
 @router.get("/overview", response_model=OverviewOut)
 def overview(db: Session = Depends(get_db)) -> OverviewOut:
+    _ensure_bootstrap(db)
     gw = current_gameweek(db)
     # Cold start / empty DB (common on Vercel SQLite) — sync once so GW + deadline appear.
     if gw is None:
@@ -128,6 +140,7 @@ def list_gameweeks(db: Session = Depends(get_db)) -> list[GameweekOut]:
 
 @router.get("/teams", response_model=list[TeamOut])
 def list_teams(db: Session = Depends(get_db)) -> list[TeamOut]:
+    _ensure_bootstrap(db)
     return list(db.scalars(select(Team).order_by(Team.id)).all())
 
 
@@ -141,12 +154,7 @@ def list_players(
     sort: str = Query(default="total_points"),
 ) -> list[PlayerOut]:
     if db.scalar(select(func.count(Player.id))) == 0:
-        try:
-            sync_bootstrap_and_fixtures(db)
-            db.commit()
-        except Exception:
-            db.rollback()
-
+        _ensure_bootstrap(db)
     stmt = select(Player).options(joinedload(Player.team))
     if team_id:
         stmt = stmt.where(Player.team_id == team_id)
@@ -270,6 +278,7 @@ def list_fixtures(
     db: Session = Depends(get_db),
     event: int | None = Query(default=None),
 ) -> list[FixtureOut]:
+    _ensure_bootstrap(db)
     stmt = (
         select(Fixture)
         .options(joinedload(Fixture.team_h), joinedload(Fixture.team_a))

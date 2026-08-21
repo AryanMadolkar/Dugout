@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchFixtures, fetchOverview, fetchTeams, type Team } from "@/lib/api";
+import { fetchFixtures, fetchOverview, fetchTeams, triggerIngest, type Team } from "@/lib/api";
 import type { Fixture } from "@/lib/types";
 import { SectionHead } from "./ui/SectionHead";
 
@@ -23,10 +23,21 @@ function fdrCell(fdr: number) {
   return "bg-[var(--fdr-hard)] text-[var(--coral-dark)]";
 }
 
-function buildRows(teams: Team[], fixturesByGw: Fixture[][], gwIds: number[]): WatchRow[] {
+function clubsFromFixtures(batches: Fixture[][]): string[] {
+  const set = new Set<string>();
+  for (const fixtures of batches) {
+    for (const f of fixtures) {
+      if (f.team_h_short) set.add(f.team_h_short);
+      if (f.team_a_short) set.add(f.team_a_short);
+    }
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+function buildRows(clubs: string[], fixturesByGw: Fixture[][]): WatchRow[] {
   const byClub: Record<string, Cell[]> = {};
-  for (const t of teams) {
-    byClub[t.short_name] = gwIds.map(() => null);
+  for (const club of clubs) {
+    byClub[club] = fixturesByGw.map(() => null);
   }
 
   fixturesByGw.forEach((fixtures, gwIndex) => {
@@ -51,14 +62,46 @@ function buildRows(teams: Team[], fixturesByGw: Fixture[][], gwIds: number[]): W
     }
   });
 
-  return Object.keys(byClub)
-    .sort((a, b) => a.localeCompare(b))
-    .map((club) => ({ club, cells: byClub[club] }));
+  return clubs.map((club) => ({ club, cells: byClub[club] ?? [] }));
+}
+
+async function loadWatchData(): Promise<{ rows: WatchRow[]; gwLabels: string[] }> {
+  let overview = await fetchOverview();
+  let teams: Team[] = await fetchTeams().catch(() => []);
+  let startGw = overview.current_gameweek?.id ?? 1;
+  let gwIds = [startGw, startGw + 1, startGw + 2];
+  let fixtureBatches = await Promise.all(gwIds.map((id) => fetchFixtures(id).catch(() => [] as Fixture[])));
+
+  const empty =
+    teams.length === 0 && fixtureBatches.every((b) => b.length === 0);
+
+  if (empty) {
+    try {
+      await triggerIngest();
+    } catch {
+      /* ignore — retry reads anyway */
+    }
+    overview = await fetchOverview();
+    teams = await fetchTeams().catch(() => []);
+    startGw = overview.current_gameweek?.id ?? 1;
+    gwIds = [startGw, startGw + 1, startGw + 2];
+    fixtureBatches = await Promise.all(gwIds.map((id) => fetchFixtures(id).catch(() => [] as Fixture[])));
+  }
+
+  const clubs =
+    teams.length > 0
+      ? teams.map((t) => t.short_name).filter(Boolean).sort((a, b) => a.localeCompare(b))
+      : clubsFromFixtures(fixtureBatches);
+
+  return {
+    rows: buildRows(clubs, fixtureBatches),
+    gwLabels: gwIds.map((id) => `GW${id}`),
+  };
 }
 
 export function FixtureWatchPanel() {
   const [rows, setRows] = useState<WatchRow[]>([]);
-  const [gwLabels, setGwLabels] = useState<string[]>(["+1", "+2", "+3"]);
+  const [gwLabels, setGwLabels] = useState<string[]>(["GW", "GW+1", "GW+2"]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,24 +110,21 @@ export function FixtureWatchPanel() {
     setLoading(true);
     setError(null);
 
-    (async () => {
-      try {
-        const [overview, teams] = await Promise.all([fetchOverview(), fetchTeams()]);
-        const startGw = overview.current_gameweek?.id ?? 1;
-        const gwIds = [startGw, startGw + 1, startGw + 2];
-        const fixtureBatches = await Promise.all(gwIds.map((id) => fetchFixtures(id).catch(() => [] as Fixture[])));
+    loadWatchData()
+      .then((data) => {
         if (cancelled) return;
-        setGwLabels(gwIds.map((id) => `GW${id}`));
-        setRows(buildRows(teams, fixtureBatches, gwIds));
-      } catch (err) {
+        setGwLabels(data.gwLabels);
+        setRows(data.rows);
+      })
+      .catch((err) => {
         if (!cancelled) {
           setRows([]);
           setError(err instanceof Error ? err.message : "Could not load fixtures");
         }
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-    })();
+      });
 
     return () => {
       cancelled = true;
@@ -100,7 +140,7 @@ export function FixtureWatchPanel() {
         ) : error ? (
           <p className="text-[13px] text-[var(--coral)]">{error}</p>
         ) : rows.length === 0 ? (
-          <p className="text-[13px] text-[var(--text-secondary)]">No fixture data yet. Run ingest or re-scan.</p>
+          <p className="text-[13px] text-[var(--text-secondary)]">No fixture data yet. Try refreshing the page.</p>
         ) : (
           <div className="overflow-x-auto rounded-[3px] border border-[var(--border)]">
             <table className="w-full text-[12px]">
