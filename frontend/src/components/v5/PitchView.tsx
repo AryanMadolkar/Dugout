@@ -87,7 +87,7 @@ export function PitchView({ squad }: Props) {
             <button
               type="button"
               onClick={onOptimise}
-              title="Pick the highest-xP valid XI from your 15"
+              title="Best valid XI from your 15 — Dugout xP + fixture difficulty"
               className="control rounded-[3px] border border-[var(--navy)]/20 bg-[var(--navy)] px-2.5 py-1 text-[10px] font-bold tracking-wide text-white hover:bg-[#1a3348]"
             >
               Optimise XI
