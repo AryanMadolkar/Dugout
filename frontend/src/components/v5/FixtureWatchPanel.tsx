@@ -167,7 +167,7 @@ export function FixtureWatchPanel() {
                             className={`inline-block min-w-[2.75rem] rounded px-1.5 py-0.5 text-[11px] font-bold ${fdrCell(cell.fdr)}`}
                             title={`${cell.home ? "Home" : "Away"} · FDR ${cell.fdr}`}
                           >
-                            {cell.home ? cell.opp : `@${cell.opp}`}
+                            {cell.opp}
                           </span>
                         ) : (
                           <span className="inline-block min-w-[2.75rem] rounded bg-[var(--canvas)] px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]">
