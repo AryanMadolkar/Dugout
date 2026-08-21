@@ -164,10 +164,10 @@ export function FixtureWatchPanel() {
                       <td key={j} className="px-1 py-1.5 text-center">
                         {cell ? (
                           <span
-                            className={`inline-block min-w-[2.75rem] rounded px-1.5 py-0.5 text-[11px] font-bold ${fdrCell(cell.fdr)}`}
+                            className={`inline-block min-w-[3.5rem] rounded px-1.5 py-0.5 text-[11px] font-bold ${fdrCell(cell.fdr)}`}
                             title={`${cell.home ? "Home" : "Away"} · FDR ${cell.fdr}`}
                           >
-                            {cell.opp}
+                            {cell.home ? `${cell.opp} (H)` : `${cell.opp} (A)`}
                           </span>
                         ) : (
                           <span className="inline-block min-w-[2.75rem] rounded bg-[var(--canvas)] px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]">
@@ -183,7 +183,7 @@ export function FixtureWatchPanel() {
           </div>
         )}
         <p className="mt-3 text-[12px] text-[var(--text-secondary)]">
-          All Premier League clubs · opponent short name · green easy · yellow mid · red hard.
+          All Premier League clubs · opponent short name · (H) home · (A) away · green easy · yellow mid · red hard.
         </p>
       </div>
     </section>
