@@ -49,6 +49,16 @@ export function fetchFixtures(event?: number) {
   return getJson<Fixture[]>(`/api/fixtures${qs}`);
 }
 
+export type Team = {
+  id: number;
+  name: string;
+  short_name: string;
+};
+
+export function fetchTeams() {
+  return getJson<Team[]>("/api/teams");
+}
+
 export type PlayerHistoryGw = {
   round: number;
   total_points: number;
