@@ -55,6 +55,7 @@ type DashboardContextValue = {
   bench: SquadPlayer[];
   chipUsage: ChipUsageMap;
   setChipAvailability: (name: ChipName, status: ChipAvailability) => void;
+  playChip: (name: ChipName) => void;
   activeChip: ChipName | null;
   setActiveChip: (chip: ChipName | null) => void;
   selectedId: string | null;
@@ -184,18 +185,25 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       saveChipUsage(next);
       return next;
     });
-    // "Used" means this chip is in play — apply it as the exclusive GW chip so BB/TC projections update.
     if (status === "used") {
-      saveActiveChip(name);
-      setActiveChipState(name);
+      // Already spent this season — clear from this GW so projections drop BB/TC.
+      setActiveChipState((current) => {
+        if (current !== name) return current;
+        saveActiveChip(null);
+        return null;
+      });
       return;
     }
-    // Cleared back to available / unknown — drop from this GW if it was selected.
-    setActiveChipState((current) => {
-      if (current !== name) return current;
-      saveActiveChip(null);
-      return null;
+  }, []);
+
+  const playChip = useCallback((name: ChipName) => {
+    setChipUsage((prev) => {
+      const next = { ...prev, [name]: "available" as ChipAvailability };
+      saveChipUsage(next);
+      return next;
     });
+    saveActiveChip(name);
+    setActiveChipState(name);
   }, []);
 
   const setActiveChip = useCallback((chip: ChipName | null) => {
@@ -226,6 +234,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       bench,
       chipUsage,
       setChipAvailability,
+      playChip,
       activeChip,
       setActiveChip,
       selectedId,
@@ -248,6 +257,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       bench,
       chipUsage,
       setChipAvailability,
+      playChip,
       activeChip,
       setActiveChip,
       selectedId,

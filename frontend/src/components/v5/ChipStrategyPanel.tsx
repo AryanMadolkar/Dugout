@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { useDashboard } from "@/context/DashboardContext";
-import type { ChipAvailability, ChipName } from "@/lib/dashboard-data";
+import type { ChipName } from "@/lib/dashboard-data";
 import { CHIP_NAMES } from "@/lib/dashboard-data";
 import { recommendChipStrategy } from "@/lib/chip-strategy";
 import { PLAYABLE_CHIPS, normalizeChip } from "@/lib/projections";
@@ -11,12 +11,6 @@ import { SectionHead } from "./ui/SectionHead";
 
 type Props = {
   expanded?: boolean;
-};
-
-const STATUS_LABEL: Record<ChipAvailability, string> = {
-  available: "Available",
-  used: "Used",
-  unknown: "Not set",
 };
 
 const SHORT: Record<ChipName, string> = {
@@ -27,7 +21,8 @@ const SHORT: Record<ChipName, string> = {
 };
 
 export function ChipStrategyPanel({ expanded }: Props) {
-  const { chipUsage, setChipAvailability, starters, bench, hasSquad, activeChip, setActiveChip } = useDashboard();
+  const { chipUsage, setChipAvailability, playChip, starters, bench, hasSquad, activeChip, setActiveChip } =
+    useDashboard();
 
   const recommendation = useMemo(
     () => (hasSquad ? recommendChipStrategy(starters, bench, chipUsage) : null),
@@ -60,7 +55,7 @@ export function ChipStrategyPanel({ expanded }: Props) {
               </>
             ) : (
               <p className="text-[13px] text-[var(--text-secondary)]">
-                Scan your squad to get a chip suggestion. Select exactly one chip for this GW.
+                Scan your squad to get a chip suggestion. Hit Play on a chip to apply it this GW.
               </p>
             )}
           </div>
@@ -79,16 +74,24 @@ export function ChipStrategyPanel({ expanded }: Props) {
               </button>
               {PLAYABLE_CHIPS.map((name) => {
                 const selected = chip === name;
+                const spent = chipUsage[name] === "used";
                 return (
                   <button
                     key={name}
                     type="button"
-                    title={`Play ${name} this GW — updates projected points for BB/TC`}
-                    onClick={() => setActiveChip(selected ? null : name)}
+                    disabled={spent && !selected}
+                    title={
+                      spent && !selected
+                        ? `${name} already used this season`
+                        : `Play ${name} this GW — updates projected points for BB/TC`
+                    }
+                    onClick={() => (selected ? setActiveChip(null) : playChip(name))}
                     className={`control px-2.5 py-1.5 text-[11px] font-semibold ${
                       selected
                         ? "bg-[var(--navy)] text-white"
-                        : "border border-[var(--border)] hover:bg-[var(--canvas)]"
+                        : spent
+                          ? "cursor-not-allowed border border-[var(--border)] opacity-40"
+                          : "border border-[var(--border)] hover:bg-[var(--canvas)]"
                     }`}
                   >
                     {SHORT[name]}
@@ -99,49 +102,62 @@ export function ChipStrategyPanel({ expanded }: Props) {
           </div>
 
           <div>
-            <p className="mb-2 text-[11px] text-[var(--text-secondary)]">Season status</p>
+            <p className="mb-2 text-[11px] text-[var(--text-secondary)]">Season chips — Play or mark Used</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {CHIP_NAMES.map((name) => {
                 const status = chipUsage[name];
                 const playing = chip === name;
+                const spent = status === "used";
+                const statusText = playing ? "Playing" : spent ? "Used" : "Ready";
                 return (
-                  <div key={name} className="rounded-[3px] border border-[var(--border)] p-2.5 text-left">
+                  <div
+                    key={name}
+                    className={`rounded-[3px] border p-2.5 text-left transition ${
+                      playing
+                        ? "border-[var(--navy)] bg-[var(--navy)]/5"
+                        : "border-[var(--border)]"
+                    }`}
+                  >
                     <div className="mb-1.5 flex items-start justify-between gap-1">
-                      <p className="text-[12px] font-bold leading-tight">
-                        {SHORT[name]}
-                        {playing ? (
-                          <span className="ml-1 text-[8px] font-bold text-[var(--navy)]">GW</span>
-                        ) : null}
-                      </p>
+                      <p className="text-[12px] font-bold leading-tight">{SHORT[name]}</p>
                       <span
                         className={`font-label shrink-0 text-[9px] font-bold ${
-                          status === "used"
-                            ? "text-[var(--coral)]"
-                            : status === "available"
-                              ? "text-[var(--positive)]"
-                              : "text-[var(--text-secondary)]"
+                          playing
+                            ? "text-[var(--navy)]"
+                            : spent
+                              ? "text-[var(--coral)]"
+                              : "text-[var(--positive)]"
                         }`}
                       >
-                        {STATUS_LABEL[status]}
+                        {statusText}
                       </span>
                     </div>
                     <div className="flex gap-1">
-                      {(["available", "used"] as const).map((option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => setChipAvailability(name, option)}
-                          className={`control flex-1 px-1 py-1 text-[10px] font-semibold transition ${
-                            status === option
-                              ? option === "used"
-                                ? "bg-[var(--coral)] text-white"
-                                : "bg-[var(--navy)] text-white"
+                      <button
+                        type="button"
+                        disabled={spent && !playing}
+                        onClick={() => playChip(name)}
+                        className={`control flex-1 px-1 py-1 text-[10px] font-semibold transition ${
+                          playing
+                            ? "bg-[var(--navy)] text-white"
+                            : spent
+                              ? "cursor-not-allowed border border-[var(--border)] opacity-40"
                               : "border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--canvas)]"
-                          }`}
-                        >
-                          {option === "available" ? "Avail" : "Used"}
-                        </button>
-                      ))}
+                        }`}
+                      >
+                        Play
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChipAvailability(name, spent ? "available" : "used")}
+                        className={`control flex-1 px-1 py-1 text-[10px] font-semibold transition ${
+                          spent
+                            ? "bg-[var(--coral)] text-white"
+                            : "border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--canvas)]"
+                        }`}
+                      >
+                        Used
+                      </button>
                     </div>
                   </div>
                 );

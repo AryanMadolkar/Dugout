@@ -8,7 +8,7 @@ import { PLAYABLE_CHIPS, normalizeChip, projectionChipLabel } from "@/lib/projec
 import { formatScanTime, projectedPoints } from "@/lib/squad-storage";
 
 export function TeamHeader() {
-  const { squad, starters, bench, activeChip, setActiveChip, chipUsage } = useDashboard();
+  const { squad, starters, bench, activeChip, setActiveChip, playChip, chipUsage } = useDashboard();
   const [gameweek, setGameweek] = useState<number | null>(null);
   const [deadline, setDeadline] = useState<string | null>(null);
 
@@ -111,16 +111,19 @@ export function TeamHeader() {
                 <button
                   key={name}
                   type="button"
+                  disabled={seasonUsed && !selected}
                   title={
-                    seasonUsed
-                      ? `${name} marked used — still applies to this GW projection when selected`
+                    seasonUsed && !selected
+                      ? `${name} marked used`
                       : `Play ${name} this GW`
                   }
-                  onClick={() => setActiveChip(selected ? null : name)}
+                  onClick={() => (selected ? setActiveChip(null) : playChip(name))}
                   className={`control px-2 py-1 text-[10px] font-semibold ${
                     selected
                       ? "bg-[var(--navy)] text-white"
-                      : "border border-[var(--border)] hover:bg-white"
+                      : seasonUsed
+                        ? "cursor-not-allowed border border-[var(--border)] opacity-40"
+                        : "border border-[var(--border)] hover:bg-white"
                   }`}
                 >
                   {short[name]}
@@ -132,8 +135,7 @@ export function TeamHeader() {
 
         <div className="flex flex-1 flex-col justify-center gap-4 p-5">
           <p className="text-[13px] text-[var(--text-secondary)]">
-            Pick TC or BB for this GW to recalculate projected points (captain ×3 or +bench). Season Used also
-            activates that chip for projections.
+            Pick TC or BB — or hit Play on a chip below — to recalculate projected points (captain ×3 or +bench).
           </p>
           <div className="flex gap-2">
             <Link
