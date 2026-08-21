@@ -18,6 +18,13 @@ const robotoCondensed = Roboto_Condensed({
 export const metadata: Metadata = {
   title: "Dugout",
   description: "FPL decision support — transfer, captain, chip recommendations",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/dugout-logo.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180" }],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

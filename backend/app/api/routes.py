@@ -184,7 +184,7 @@ def ai_verdict(body: AiVerdictRequest, db: Session = Depends(get_db)) -> AiVerdi
             transfers=list(result.get("transfers") or []),
             captain=result.get("captain") if isinstance(result.get("captain"), dict) else None,
             risks=[str(r) for r in (result.get("risks") or [])],
-            source="gemini",
+            source=str(result.get("source") or "gemini"),
             gameweek=result.get("gameweek"),
         )
     except RuntimeError as exc:

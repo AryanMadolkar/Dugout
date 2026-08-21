@@ -11,9 +11,11 @@ from app.services.http import http_post
 
 GEMINI_MODELS = [
     "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-latest",
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
-    "gemini-2.5-flash-lite",
 ]
 
 
@@ -24,6 +26,21 @@ def _auth_attempts(api_key: str) -> list[tuple[dict[str, str], dict[str, str] | 
     if api_key.startswith("ya29."):
         return [(bearer, None)]
     return [(api_key_header, None), query_key]
+
+
+def _friendly_error(exc: Exception) -> str:
+    msg = str(exc).strip() or "Gemini request failed"
+    lower = msg.lower()
+    if "403" in msg or "permission_denied" in lower or "denied access" in lower:
+        return (
+            "Gemini denied access (403). Create a new key at https://aistudio.google.com/apikey, "
+            "set GEMINI_API_KEY on Vercel for Production, and redeploy."
+        )
+    if "401" in msg or "unauthenticated" in lower:
+        return (
+            "Gemini API key rejected (401). Update GEMINI_API_KEY on Vercel with a fresh AI Studio key."
+        )
+    return msg
 
 
 def _extract_text(body: dict[str, Any]) -> str:
@@ -74,7 +91,7 @@ def gemini_generate_json(prompt: str, *, temperature: float = 0.3) -> Any:
                 response = http_post(url, headers=headers, json=payload, params=params, timeout=75.0)
                 return _parse_json(_extract_text(response.json()))
             except Exception as exc:  # noqa: BLE001 — try next auth/model
-                last_error = str(exc)
+                last_error = _friendly_error(exc)
                 continue
 
     raise RuntimeError(last_error)

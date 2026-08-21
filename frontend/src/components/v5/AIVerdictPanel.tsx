@@ -118,7 +118,8 @@ export function AIVerdictPanel() {
               <p className="mt-3 text-[11px] text-[var(--text-secondary)]">Risks: {verdict.risks.join(" · ")}</p>
             ) : null}
             <p className="mt-3 font-label text-[10px] text-[var(--text-secondary)]">
-              Powered by Gemini · confidence {verdict.confidence}%
+              {verdict.source === "heuristic" ? "Dugout heuristic (Gemini blocked)" : "Powered by Gemini"}
+              {" · "}confidence {verdict.confidence}%
               {verdict.gameweek ? ` · GW${verdict.gameweek}` : ""}
             </p>
           </>

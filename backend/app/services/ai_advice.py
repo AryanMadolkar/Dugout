@@ -43,6 +43,73 @@ def _squad_context(squad: list[dict[str, Any]]) -> str:
     return json.dumps(squad, ensure_ascii=False)
 
 
+def _heuristic_verdict(
+    squad: list[dict[str, Any]],
+    candidates: list[dict[str, Any]],
+    chip: str | None,
+    gw_id: int | None,
+) -> dict[str, Any]:
+    """Local fallback when Gemini is blocked (403) or unreachable."""
+    starters = [p for p in squad if str(p.get("slot") or "starter") != "bench"]
+    pool = starters or list(squad)
+    by_xp = sorted(pool, key=lambda p: float(p.get("xp") or 0), reverse=True)
+    captain = by_xp[0] if by_xp else None
+    weakest = sorted(pool, key=lambda p: (float(p.get("form") or 0), float(p.get("xp") or 0)))[0] if pool else None
+    target = candidates[0] if candidates else None
+
+    transfers: list[dict[str, Any]] = []
+    action = "Hold"
+    if weakest and target and float(target.get("ep_next") or 0) > float(weakest.get("xp") or 0) + 0.4:
+        action = "Transfer"
+        transfers = [
+            {
+                "out": weakest.get("name"),
+                "in": target.get("name"),
+                "reason": f"{target.get('name')} has stronger upcoming xP than {weakest.get('name')}.",
+            }
+        ]
+
+    if chip and chip.lower() in {"triple captain", "tc"} and captain:
+        action = "Chip"
+        headline = f"TC lean: {captain.get('name')}"
+        summary = (
+            f"Gemini is unavailable, so Dugout used FPL form/xP. "
+            f"{captain.get('name')} leads your XI on projected points for a Triple Captain."
+        )
+    elif action == "Transfer" and weakest and target:
+        headline = f"Consider {weakest.get('name')} → {target.get('name')}"
+        summary = (
+            "Gemini is unavailable, so this is a Dugout heuristic from FPL ep_next / form. "
+            "Confirm fixtures before hitting."
+        )
+    else:
+        headline = "Hold — squad looks set"
+        summary = (
+            "Gemini is unavailable, so Dugout ranked your scanned squad on xP/form. "
+            "No urgent move jumps out from the data alone."
+        )
+
+    risks = ["Gemini API unavailable — advice is heuristic only."]
+    if chip:
+        risks.append(f"Active chip projection: {chip}.")
+
+    return {
+        "headline": headline,
+        "summary": summary,
+        "action": action,
+        "confidence": 45,
+        "transfers": transfers,
+        "captain": (
+            {"name": str(captain.get("name")), "reason": "Highest projected points in your XI."}
+            if captain
+            else None
+        ),
+        "risks": risks,
+        "source": "heuristic",
+        "gameweek": gw_id,
+    }
+
+
 def generate_verdict(db: Session, squad: list[dict[str, Any]], chip: str | None = None) -> dict[str, Any]:
     _ensure_players(db)
     gw = current_gameweek(db)
@@ -81,12 +148,15 @@ Prefer 0-2 transfers. If the squad is strong, action can be Hold with empty tran
 Captain must be from the manager's squad when possible.
 """
 
-    data = gemini_generate_json(prompt, temperature=0.35)
-    if not isinstance(data, dict):
-        raise RuntimeError("Gemini verdict was not a JSON object")
-    data["source"] = "gemini"
-    data["gameweek"] = gw.id if gw else None
-    return data
+    try:
+        data = gemini_generate_json(prompt, temperature=0.35)
+        if not isinstance(data, dict):
+            raise RuntimeError("Gemini verdict was not a JSON object")
+        data["source"] = "gemini"
+        data["gameweek"] = gw.id if gw else None
+        return data
+    except Exception:
+        return _heuristic_verdict(squad, candidates, chip, gw.id if gw else None)
 
 
 def generate_ai_picks(

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { TAB_ROUTES, type Tab } from "@/lib/routes";
@@ -49,20 +50,16 @@ export function HeaderBar({ activeTab }: Props) {
       }}
     >
       <div className="mx-auto flex max-w-[1560px] items-center justify-between gap-4 px-6 py-3">
-        <Link href="/" className="flex items-center gap-3 hover:opacity-90">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-[3px] text-[13px] font-extrabold"
-            style={{
-              background: "linear-gradient(135deg, var(--coral) 0%, var(--coral-dark) 100%)",
-              boxShadow: "0 2px 8px rgba(232,80,60,0.4)",
-            }}
-          >
-            D
-          </div>
-          <div>
-            <span className="block text-[14px] font-extrabold tracking-tight">Dugout</span>
-            <span className="font-label text-[10px] text-white/50">Decision layer</span>
-          </div>
+        <Link href="/" className="flex items-center gap-2.5 hover:opacity-90">
+          <Image
+            src="/dugout-logo.png"
+            alt="Dugout"
+            width={36}
+            height={36}
+            className="h-9 w-9 rounded-[3px] object-cover"
+            priority
+          />
+          <span className="text-[15px] font-extrabold tracking-tight">Dugout</span>
         </Link>
 
         <div className="flex items-center gap-3">

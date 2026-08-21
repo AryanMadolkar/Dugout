@@ -51,12 +51,14 @@ export default function MyTeamPage() {
         <div className="space-y-4">
           <AIVerdictPanel />
           <CaptainPanel />
-          <ChipStrategyPanel />
         </div>
         <div className="dashboard-diagnostics space-y-4">
           <TeamRatingPanel />
           <PlayerDetailPanel />
         </div>
+      </div>
+      <div className="mt-4">
+        <ChipStrategyPanel />
       </div>
       <ComparisonPanel />
       <FixtureWatchPanel />
