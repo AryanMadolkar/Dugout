@@ -181,7 +181,8 @@ Rules:
 - Mark captain/vice if armband visible (C/V).
 - bench = substitute row below the pitch.
 - chips.playing: if a chip is clearly active / played for this gameweek in the UI (banner, selected chip, "Triple Captain" active, etc.), set to exactly one of "Wildcard"|"Free Hit"|"Bench Boost"|"Triple Captain", else null. Only ONE chip can be active per GW.
-- chips.status: for each chip, "used" if greyed/spent/already played this season, "available" if clearly unused, otherwise "unknown". If chip info is not visible, leave all as "unknown" and playing as null.
+- chips.status: "used" ONLY if the UI clearly shows the chip was already played / spent this season (e.g. "Played", used badge, crossed-out after use). "available" if clearly still usable. Otherwise "unknown".
+- CRITICAL: "Unavailable" / greyed / locked / disabled for this gameweek does NOT mean used — leave status as "unknown" (do not set "used"). Many chips show unavailable simply because they are not selected for this GW.
 """
 
 
@@ -208,11 +209,16 @@ def _normalize_chips(raw: Any) -> dict[str, Any]:
     if isinstance(raw, dict):
         raw_status = raw.get("status") if isinstance(raw.get("status"), dict) else {}
         for name in CHIP_NAMES:
-            val = str(raw_status.get(name) or "unknown").lower()
-            if val in ("used", "spent", "played"):
+            val = str(raw_status.get(name) or "unknown").lower().strip()
+            # "unavailable" / locked / disabled ≠ used (FPL greys chips that are merely not selected).
+            if val in ("unavailable", "locked", "disabled", "inactive", "not available"):
+                status[name] = "unknown"
+            elif val in ("used", "spent", "played", "already played"):
                 status[name] = "used"
-            elif val in ("available", "unused", "active"):
+            elif val in ("available", "unused", "ready", "active"):
                 status[name] = "available"
+            else:
+                status[name] = "unknown"
         play = raw.get("playing") or raw.get("active") or raw.get("active_this_gw")
         if isinstance(play, str) and play in CHIP_NAMES:
             playing = play

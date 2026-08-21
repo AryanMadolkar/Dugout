@@ -133,24 +133,13 @@ export function TeamHeader() {
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col justify-center gap-4 p-5">
-          <p className="text-[13px] text-[var(--text-secondary)]">
-            Pick TC or BB — or hit Play on a chip below — to recalculate projected points (captain ×3 or +bench).
-          </p>
-          <div className="flex gap-2">
-            <Link
-              href="/upload"
-              className="control border border-[var(--border)] bg-white px-3 py-2 text-[12px] font-semibold hover:bg-[var(--canvas)]"
-            >
-              Re-scan
-            </Link>
-            <a
-              href="#chip-strategy"
-              className="control border border-[var(--border)] bg-white px-3 py-2 text-[12px] font-semibold hover:bg-[var(--canvas)]"
-            >
-              Chip strategy
-            </a>
-          </div>
+        <div className="flex flex-1 flex-col justify-center p-5">
+          <Link
+            href="/upload"
+            className="control w-fit border border-[var(--border)] bg-white px-3 py-2 text-[12px] font-semibold hover:bg-[var(--canvas)]"
+          >
+            Re-scan
+          </Link>
         </div>
       </div>
     </div>

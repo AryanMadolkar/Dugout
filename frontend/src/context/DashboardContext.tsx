@@ -160,13 +160,16 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     setSelectedId(confirmed.starters[0]?.id ?? null);
 
     // Apply chip info detected from the screenshot (one active chip per GW).
+    // Do not treat scan "unavailable" as used — backend maps that to unknown; only apply used/available.
     const detected = pendingScan.chips;
     if (detected?.status) {
       setChipUsage((prev) => {
         const next = { ...prev };
         for (const name of Object.keys(DEFAULT_CHIP_USAGE) as ChipName[]) {
-          const val = detected.status[name];
-          if (val === "used" || val === "available") next[name] = val;
+          const val = String(detected.status[name] || "").toLowerCase();
+          if (val === "used" || val === "spent" || val === "played") next[name] = "used";
+          else if (val === "available" || val === "unused" || val === "ready") next[name] = "available";
+          // unavailable / unknown / anything else → leave previous or unknown (do not mark used)
         }
         saveChipUsage(next);
         return next;
