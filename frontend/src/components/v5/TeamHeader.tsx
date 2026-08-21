@@ -37,10 +37,21 @@ export function TeamHeader() {
     "Triple Captain": "TC",
   };
 
+  const deadlineLabel = deadline
+    ? new Intl.DateTimeFormat("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(new Date(deadline))
+    : null;
+
   return (
     <div className="panel-elevated overflow-hidden">
-      <div className="flex flex-wrap items-stretch">
-        <div className="flex min-w-[200px] flex-1 flex-col justify-center border-b border-[var(--border)] p-5 sm:border-b-0">
+      <div className="grid md:grid-cols-2">
+        <div className="flex flex-col justify-center border-b border-[var(--border)] p-5 md:border-b-0 md:border-r">
           <div className="font-label mb-1 text-[10px] text-[var(--text-secondary)]">Your squad</div>
           <h1 className="text-[22px] font-extrabold tracking-tight text-[var(--navy)]">
             {squad.formation ? `${squad.formation} formation` : "Scanned squad"}
@@ -53,27 +64,18 @@ export function TeamHeader() {
         </div>
 
         <div
-          className="flex min-w-[240px] shrink-0 flex-col items-center justify-center border-t border-[var(--border)] px-6 py-5 sm:ml-auto sm:border-t-0 sm:border-l"
+          className="flex flex-col items-center justify-center px-5 py-5 text-center"
           style={{
-            background: "linear-gradient(160deg, var(--fdr-easy) 0%, #fff 60%)",
+            background: "linear-gradient(160deg, var(--fdr-easy) 0%, #fff 70%)",
           }}
         >
-          <p className="font-label text-center text-[11px] text-[var(--positive)]">
+          <p className="font-label text-[11px] text-[var(--positive)]">
             Projected · {gameweek ? `GW${gameweek}` : "this GW"}
-            {deadline
-              ? ` · deadline ${new Intl.DateTimeFormat("en-GB", {
-                  weekday: "short",
-                  day: "numeric",
-                  month: "short",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                }).format(new Date(deadline))}`
-              : ""}
+            {deadlineLabel ? ` · deadline ${deadlineLabel}` : ""}
           </p>
           <p
             key={`xp-${chip ?? "none"}-${projected}`}
-            className="text-[62px] font-extrabold leading-none tracking-tighter"
+            className="mt-1 text-[56px] font-extrabold leading-none tracking-tighter md:text-[62px]"
             style={{
               background: "linear-gradient(135deg, var(--navy) 0%, #2a5070 100%)",
               WebkitBackgroundClip: "text",
@@ -83,7 +85,7 @@ export function TeamHeader() {
           >
             {projected.toFixed(1)}
           </p>
-          <p className="mt-1 text-center text-[12px] text-[var(--text-secondary)]">
+          <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
             Dugout xP ({projectionChipLabel(activeChip)})
             {chipDelta !== 0 ? (
               <span
