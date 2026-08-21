@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { TAB_ROUTES, type Tab } from "@/lib/routes";
@@ -51,13 +50,13 @@ export function HeaderBar({ activeTab }: Props) {
     >
       <div className="mx-auto flex max-w-[1560px] items-center justify-between gap-4 px-6 py-3">
         <Link href="/" className="flex items-center gap-2.5 hover:opacity-90">
-          <Image
+          {/* Plain img: next/image optimizer 404s on this Vercel multi-service deploy */}
+          <img
             src="/dugout-logo.png"
             alt="Dugout"
             width={36}
             height={36}
             className="h-9 w-9 rounded-[3px] object-cover"
-            priority
           />
           <span className="text-[15px] font-extrabold tracking-tight">Dugout</span>
         </Link>
