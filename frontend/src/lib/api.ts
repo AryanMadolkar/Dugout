@@ -190,6 +190,8 @@ export type ScanApiResult = {
 };
 
 function mapScanPlayer(raw: Record<string, unknown>): SquadPlayer {
+  const position = normalizeRow(String(raw.position || "MID"), "MID");
+  const row = normalizeRow(String(raw.row || ""), position);
   return {
     id: String(raw.id),
     fplId: raw.fpl_id as number | undefined,
@@ -197,7 +199,7 @@ function mapScanPlayer(raw: Record<string, unknown>): SquadPlayer {
     initials: String(raw.initials),
     club: String(raw.club),
     clubColor: String(raw.clubColor),
-    position: raw.position as SquadPlayer["position"],
+    position,
     price: Number(raw.price),
     opponent: String(raw.opponent),
     home: Boolean(raw.home),
@@ -207,12 +209,36 @@ function mapScanPlayer(raw: Record<string, unknown>): SquadPlayer {
     ownership: Number(raw.ownership),
     isCaptain: Boolean(raw.isCaptain),
     isVice: Boolean(raw.isVice),
-    row: raw.row as SquadPlayer["row"],
+    row,
     slot: raw.slot as SquadPlayer["slot"],
     confidence: Number(raw.confidence),
     rawName: raw.rawName ? String(raw.rawName) : undefined,
     nextFixtures: (raw.nextFixtures as SquadPlayer["nextFixtures"]) ?? [],
   };
+}
+
+function normalizeRow(value: string, fallback: SquadPlayer["position"]): SquadPlayer["position"] {
+  const key = value.trim().toUpperCase().replace(/\s+/g, "");
+  const aliases: Record<string, SquadPlayer["position"]> = {
+    GKP: "GKP",
+    GK: "GKP",
+    G: "GKP",
+    DEF: "DEF",
+    D: "DEF",
+    MID: "MID",
+    M: "MID",
+    FWD: "FWD",
+    ST: "FWD",
+    F: "FWD",
+    ATT: "FWD",
+    FW: "FWD",
+    FORWARD: "FWD",
+    STRIKER: "FWD",
+    DEFENDER: "DEF",
+    MIDFIELDER: "MID",
+    GOALKEEPER: "GKP",
+  };
+  return aliases[key] ?? fallback;
 }
 
 export async function scanSquadImage(file: File): Promise<ScanApiResult> {

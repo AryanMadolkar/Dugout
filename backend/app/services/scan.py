@@ -19,6 +19,33 @@ from app.services.ingestion import current_gameweek, sync_bootstrap_and_fixtures
 
 POSITIONS = {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}
 ROW_ORDER = ["GKP", "DEF", "MID", "FWD"]
+ROW_ALIASES = {
+    "GK": "GKP",
+    "G": "GKP",
+    "GOALKEEPER": "GKP",
+    "DEFENDER": "DEF",
+    "D": "DEF",
+    "MIDFIELDER": "MID",
+    "M": "MID",
+    "CM": "MID",
+    "FORWARD": "FWD",
+    "STRIKER": "FWD",
+    "ST": "FWD",
+    "F": "FWD",
+    "ATT": "FWD",
+    "ATTACKER": "FWD",
+    "FW": "FWD",
+}
+
+
+def _normalize_pitch_row(row: str | None, position: str) -> str:
+    if not row:
+        return position if position in ROW_ORDER else "MID"
+    key = str(row).strip().upper().replace(" ", "")
+    mapped = ROW_ALIASES.get(key, key)
+    if mapped in ROW_ORDER:
+        return mapped
+    return position if position in ROW_ORDER else "MID"
 
 
 @dataclass
@@ -133,7 +160,7 @@ def enrich_player(
     gw_id = gw.id if gw else None
     opp, home, _ = _next_opponent(db, player.team_id, gw_id)
     pos = POSITIONS.get(player.element_type, "MID")
-    pitch_row = row or (pos if slot == "starter" else pos)
+    pitch_row = _normalize_pitch_row(row, pos)
     return {
         "id": str(player.id),
         "fpl_id": player.id,
@@ -496,11 +523,11 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
         else:
             starters.append(enriched)
 
-    # Assign pitch rows for starters missing row
+    # Assign pitch rows for starters missing / invalid row
     row_counts = {r: 0 for r in ROW_ORDER}
     for s in starters:
-        row = s.get("row") or s["position"]
-        s["row"] = row if row in ROW_ORDER else s["position"]
+        pos = s.get("position") if s.get("position") in ROW_ORDER else "MID"
+        s["row"] = _normalize_pitch_row(s.get("row"), pos)
         row_counts[s["row"]] = row_counts.get(s["row"], 0) + 1
 
     if len(starters) + len(bench) == 0:

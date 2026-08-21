@@ -21,6 +21,7 @@ import {
   type PendingScan,
 } from "@/lib/squad-storage";
 import { normalizeChip } from "@/lib/projections";
+import { optimiseStartingXi, type OptimiseXiResult } from "@/lib/optimise-xi";
 
 type Modal = "whatIf" | "makeMove" | "fixPlayer" | null;
 
@@ -68,6 +69,8 @@ type DashboardContextValue = {
   setPendingScan: (scan: PendingScan) => void;
   updatePendingScan: (updater: (prev: PendingScan) => PendingScan) => void;
   confirmPendingScan: () => void;
+  /** Re-pick best valid XI from the 15 by Dugout xP. */
+  optimiseXi: () => OptimiseXiResult | null;
   clearScannedSquad: () => void;
 };
 
@@ -215,6 +218,21 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     setActiveChipState(next);
   }, []);
 
+  const optimiseXi = useCallback((): OptimiseXiResult | null => {
+    if (!squad) return null;
+    const result = optimiseStartingXi(squad, activeChip);
+    if (!result.changed) return result;
+    saveSquad(result.squad);
+    setSquad(result.squad);
+    const stillSelected =
+      selectedId &&
+      [...result.squad.starters, ...result.squad.bench].some((p) => p.id === selectedId);
+    if (!stillSelected) {
+      setSelectedId(result.squad.starters[0]?.id ?? null);
+    }
+    return result;
+  }, [squad, activeChip, selectedId]);
+
   const clearScannedSquad = useCallback(() => {
     clearSquad();
     clearPendingScan();
@@ -250,6 +268,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setPendingScan,
       updatePendingScan,
       confirmPendingScan,
+      optimiseXi,
       clearScannedSquad,
     }),
     [
@@ -272,6 +291,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setPendingScan,
       updatePendingScan,
       confirmPendingScan,
+      optimiseXi,
       clearScannedSquad,
     ],
   );

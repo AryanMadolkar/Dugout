@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppLayout } from "@/components/v5/AppLayout";
 import { useDashboard } from "@/context/DashboardContext";
 import { fetchPlayers } from "@/lib/api";
@@ -15,6 +15,8 @@ export default function UploadConfirmPage() {
   const [fixId, setFixId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<SquadPlayer[]>([]);
+  const fixSectionRef = useRef<HTMLDivElement>(null);
+  const fixInputRef = useRef<HTMLInputElement>(null);
 
   // After confirm, pendingScan is cleared — send to home, not back to upload.
   useEffect(() => {
@@ -66,6 +68,16 @@ export default function UploadConfirmPage() {
       cancelled = true;
     };
   }, [fixId, search]);
+
+  // After choosing Fix, bring the replace panel into view (list can be long).
+  useEffect(() => {
+    if (!fixId) return;
+    const frame = requestAnimationFrame(() => {
+      fixSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      fixInputRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [fixId]);
 
   if (!hydrated || !pendingScan) {
     return (
@@ -191,9 +203,10 @@ export default function UploadConfirmPage() {
         </div>
 
         {fixId ? (
-          <div className="panel mt-4 p-4">
+          <div ref={fixSectionRef} id="fix-player" className="panel mt-4 scroll-mt-20 p-4">
             <p className="font-label text-[11px] text-[var(--text-secondary)]">Replace with</p>
             <input
+              ref={fixInputRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search FPL players…"
