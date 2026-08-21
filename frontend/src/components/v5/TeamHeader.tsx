@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
 import { fetchOverview } from "@/lib/api";
@@ -37,10 +36,11 @@ export function TeamHeader() {
     "Bench Boost": "BB",
     "Triple Captain": "TC",
   };
+
   return (
     <div className="panel-elevated overflow-hidden">
-      <div className="flex flex-wrap">
-        <div className="flex min-w-[200px] flex-1 flex-col justify-center border-b border-[var(--border)] p-5 sm:border-b-0 sm:border-r">
+      <div className="flex flex-wrap items-stretch">
+        <div className="flex min-w-[200px] flex-1 flex-col justify-center border-b border-[var(--border)] p-5 sm:border-b-0">
           <div className="font-label mb-1 text-[10px] text-[var(--text-secondary)]">Your squad</div>
           <h1 className="text-[22px] font-extrabold tracking-tight text-[var(--navy)]">
             {squad.formation ? `${squad.formation} formation` : "Scanned squad"}
@@ -53,7 +53,7 @@ export function TeamHeader() {
         </div>
 
         <div
-          className="flex min-w-[220px] flex-col items-center justify-center border-b border-[var(--border)] px-6 py-5 sm:border-b-0 sm:border-r"
+          className="flex min-w-[240px] shrink-0 flex-col items-center justify-center border-t border-[var(--border)] px-6 py-5 sm:ml-auto sm:border-t-0 sm:border-l"
           style={{
             background: "linear-gradient(160deg, var(--fdr-easy) 0%, #fff 60%)",
           }}
@@ -83,7 +83,7 @@ export function TeamHeader() {
           >
             {projected.toFixed(1)}
           </p>
-          <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+          <p className="mt-1 text-center text-[12px] text-[var(--text-secondary)]">
             Dugout xP ({projectionChipLabel(activeChip)})
             {chipDelta !== 0 ? (
               <span
@@ -112,11 +112,7 @@ export function TeamHeader() {
                   key={name}
                   type="button"
                   disabled={seasonUsed && !selected}
-                  title={
-                    seasonUsed && !selected
-                      ? `${name} marked used`
-                      : `Play ${name} this GW`
-                  }
+                  title={seasonUsed && !selected ? `${name} marked used` : `Play ${name} this GW`}
                   onClick={() => (selected ? setActiveChip(null) : playChip(name))}
                   className={`control px-2 py-1 text-[10px] font-semibold ${
                     selected
@@ -131,15 +127,6 @@ export function TeamHeader() {
               );
             })}
           </div>
-        </div>
-
-        <div className="flex flex-1 flex-col justify-center p-5">
-          <Link
-            href="/upload"
-            className="control w-fit border border-[var(--border)] bg-white px-3 py-2 text-[12px] font-semibold hover:bg-[var(--canvas)]"
-          >
-            Re-scan
-          </Link>
         </div>
       </div>
     </div>
