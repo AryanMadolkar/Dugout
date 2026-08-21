@@ -32,6 +32,14 @@ function clubsFromFixtures(fixtures: Fixture[]): string[] {
   return [...set].sort((a, b) => a.localeCompare(b));
 }
 
+function mergeFixtures(...lists: Fixture[][]): Fixture[] {
+  const byId = new Map<number, Fixture>();
+  for (const list of lists) {
+    for (const f of list) byId.set(f.id, f);
+  }
+  return [...byId.values()];
+}
+
 function buildRows(clubs: string[], gwIds: number[], fixtures: Fixture[]): WatchRow[] {
   const indexByGw = new Map(gwIds.map((id, i) => [id, i]));
   const byClub: Record<string, Cell[]> = {};
@@ -40,7 +48,8 @@ function buildRows(clubs: string[], gwIds: number[], fixtures: Fixture[]): Watch
   }
 
   for (const f of fixtures) {
-    const gwIndex = f.event != null ? indexByGw.get(f.event) : undefined;
+    const event = f.event == null ? null : Number(f.event);
+    const gwIndex = event != null ? indexByGw.get(event) : undefined;
     if (gwIndex == null) continue;
     const home = f.team_h_short;
     const away = f.team_a_short;
@@ -64,14 +73,32 @@ function buildRows(clubs: string[], gwIds: number[], fixtures: Fixture[]): Watch
   return clubs.map((club) => ({ club, cells: byClub[club] ?? [] }));
 }
 
+function missingGameweeks(gwIds: number[], fixtures: Fixture[]): number[] {
+  const present = new Set(
+    fixtures.map((f) => (f.event == null ? null : Number(f.event))).filter((e): e is number => e != null),
+  );
+  return gwIds.filter((id) => !present.has(id));
+}
+
+async function fetchAllForGws(gwIds: number[]): Promise<Fixture[]> {
+  const [upcoming, ...perGw] = await Promise.all([
+    fetchUpcomingFixtures(gwIds.length).catch(() => [] as Fixture[]),
+    ...gwIds.map((id) => fetchFixtures(id).catch(() => [] as Fixture[])),
+  ]);
+  return mergeFixtures(upcoming, ...perGw);
+}
+
 async function loadWatchData(): Promise<{ rows: WatchRow[]; gwLabels: string[] }> {
   let overview = await fetchOverview();
   let teams: Team[] = await fetchTeams().catch(() => []);
   let startGw = overview.current_gameweek?.id ?? 1;
   let gwIds = [startGw, startGw + 1, startGw + 2];
-  let fixtures = await fetchUpcomingFixtures(3).catch(() => [] as Fixture[]);
+  let fixtures = await fetchAllForGws(gwIds);
 
-  if (teams.length === 0 && fixtures.length === 0) {
+  const needsIngest =
+    teams.length === 0 || fixtures.length === 0 || missingGameweeks(gwIds, fixtures).length > 0;
+
+  if (needsIngest) {
     try {
       await triggerIngest();
     } catch {
@@ -81,16 +108,12 @@ async function loadWatchData(): Promise<{ rows: WatchRow[]; gwLabels: string[] }
     teams = await fetchTeams().catch(() => []);
     startGw = overview.current_gameweek?.id ?? 1;
     gwIds = [startGw, startGw + 1, startGw + 2];
-    fixtures = await fetchUpcomingFixtures(3).catch(() => [] as Fixture[]);
-  }
+    fixtures = await fetchAllForGws(gwIds);
 
-  // If a single GW is missing from the batch (rare), fill from event filter.
-  const present = new Set(fixtures.map((f) => f.event).filter((e): e is number => e != null));
-  if (fixtures.length > 0) {
-    for (const id of gwIds) {
-      if (present.has(id)) continue;
+    // Final pass for any still-missing GW
+    for (const id of missingGameweeks(gwIds, fixtures)) {
       const extra = await fetchFixtures(id).catch(() => [] as Fixture[]);
-      fixtures = fixtures.concat(extra);
+      fixtures = mergeFixtures(fixtures, extra);
     }
   }
 
