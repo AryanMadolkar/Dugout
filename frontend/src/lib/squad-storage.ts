@@ -75,7 +75,13 @@ export function loadActiveChip(): ChipName | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(ACTIVE_CHIP_KEY);
-    if (raw && (CHIP_NAMES as readonly string[]).includes(raw)) return raw as ChipName;
+    if (!raw) return null;
+    if ((CHIP_NAMES as readonly string[]).includes(raw)) return raw as ChipName;
+    const lower = raw.toLowerCase();
+    if (lower === "tc" || lower === "triple captain") return "Triple Captain";
+    if (lower === "bb" || lower === "bench boost") return "Bench Boost";
+    if (lower === "fh" || lower === "free hit") return "Free Hit";
+    if (lower === "wc" || lower === "wildcard") return "Wildcard";
     return null;
   } catch {
     return null;

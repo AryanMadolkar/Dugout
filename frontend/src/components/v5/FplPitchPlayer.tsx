@@ -2,7 +2,7 @@
 
 import { useDashboard } from "@/context/DashboardContext";
 import type { SquadPlayer } from "@/lib/dashboard-data";
-import { estimatePlayerGwXp, estimatePlayerXp, resolveCaptainId } from "@/lib/projections";
+import { estimatePlayerGwXp, estimatePlayerXp, normalizeChip, resolveCaptainId } from "@/lib/projections";
 import { FplJersey } from "./FplJersey";
 
 type Props = {
@@ -21,7 +21,7 @@ export function FplPitchPlayer({ player, selected, onClick, variant = "pitch" }:
   const xp = isBench ? baseXp : estimatePlayerGwXp(player, activeChip, captainId);
   const fixtureLabel = `${player.opponent} (${player.home ? "H" : "A"})`;
   const fdr = player.nextFixtures[0]?.fdr ?? 3;
-  const mult = isCap ? (activeChip === "Triple Captain" ? 3 : 2) : 1;
+  const mult = isCap ? (normalizeChip(activeChip) === "Triple Captain" ? 3 : 2) : 1;
 
   const jerseyRing =
     player.state === "flagged"

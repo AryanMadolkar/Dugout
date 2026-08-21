@@ -6,7 +6,7 @@ import { useDashboard } from "@/context/DashboardContext";
 import type { ChipAvailability, ChipName } from "@/lib/dashboard-data";
 import { CHIP_NAMES } from "@/lib/dashboard-data";
 import { recommendChipStrategy } from "@/lib/chip-strategy";
-import { PLAYABLE_CHIPS } from "@/lib/projections";
+import { PLAYABLE_CHIPS, normalizeChip } from "@/lib/projections";
 import { SectionHead } from "./ui/SectionHead";
 
 type Props = {
@@ -34,8 +34,10 @@ export function ChipStrategyPanel({ expanded }: Props) {
     [hasSquad, starters, bench, chipUsage],
   );
 
+  const chip = normalizeChip(activeChip);
+
   return (
-    <section className="panel-elevated w-full overflow-hidden">
+    <section id="chip-strategy" className="panel-elevated w-full overflow-hidden">
       <SectionHead title="Chip strategy" />
       <div className={`p-4 ${expanded ? "space-y-4" : ""}`}>
         <div
@@ -70,30 +72,26 @@ export function ChipStrategyPanel({ expanded }: Props) {
                 type="button"
                 onClick={() => setActiveChip(null)}
                 className={`control px-2.5 py-1.5 text-[11px] font-semibold ${
-                  !activeChip ? "bg-[var(--navy)] text-white" : "border border-[var(--border)]"
+                  !chip ? "bg-[var(--navy)] text-white" : "border border-[var(--border)]"
                 }`}
               >
                 None
               </button>
-              {PLAYABLE_CHIPS.map((chip) => {
-                const spent = chipUsage[chip] === "used";
-                const selected = activeChip === chip;
+              {PLAYABLE_CHIPS.map((name) => {
+                const selected = chip === name;
                 return (
                   <button
-                    key={chip}
+                    key={name}
                     type="button"
-                    disabled={spent}
-                    title={spent ? `${chip} already used this season` : `Play ${chip} this GW`}
-                    onClick={() => setActiveChip(selected ? null : chip)}
+                    title={`Play ${name} this GW — updates projected points for BB/TC`}
+                    onClick={() => setActiveChip(selected ? null : name)}
                     className={`control px-2.5 py-1.5 text-[11px] font-semibold ${
                       selected
                         ? "bg-[var(--navy)] text-white"
-                        : spent
-                          ? "cursor-not-allowed border border-[var(--border)] opacity-40"
-                          : "border border-[var(--border)] hover:bg-[var(--canvas)]"
+                        : "border border-[var(--border)] hover:bg-[var(--canvas)]"
                     }`}
                   >
-                    {SHORT[chip]}
+                    {SHORT[name]}
                   </button>
                 );
               })}
@@ -105,7 +103,7 @@ export function ChipStrategyPanel({ expanded }: Props) {
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {CHIP_NAMES.map((name) => {
                 const status = chipUsage[name];
-                const playing = activeChip === name;
+                const playing = chip === name;
                 return (
                   <div key={name} className="rounded-[3px] border border-[var(--border)] p-2.5 text-left">
                     <div className="mb-1.5 flex items-start justify-between gap-1">

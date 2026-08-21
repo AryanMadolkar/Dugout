@@ -1,4 +1,4 @@
-export const TABS = ["My team", "Transfers", "Players", "Fixtures", "Chips", "Analysis"] as const;
+export const TABS = ["My team", "Transfers", "Players", "Fixtures", "Analysis"] as const;
 export type Tab = (typeof TABS)[number];
 
 export const TAB_ROUTES: Record<Tab, string> = {
@@ -6,7 +6,6 @@ export const TAB_ROUTES: Record<Tab, string> = {
   Transfers: "/transfers",
   Players: "/players",
   Fixtures: "/fixtures",
-  Chips: "/chips",
   Analysis: "/analysis",
 };
 

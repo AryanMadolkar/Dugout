@@ -20,6 +20,7 @@ import {
   saveSquad,
   type PendingScan,
 } from "@/lib/squad-storage";
+import { normalizeChip } from "@/lib/projections";
 
 type Modal = "whatIf" | "makeMove" | "fixPlayer" | null;
 
@@ -170,8 +171,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     }
-    const playing = detected?.playing;
-    if (playing === "Wildcard" || playing === "Free Hit" || playing === "Bench Boost" || playing === "Triple Captain") {
+    const playing = normalizeChip(detected?.playing);
+    if (playing) {
       saveActiveChip(playing);
       setActiveChipState(playing);
     }
@@ -183,21 +184,22 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       saveChipUsage(next);
       return next;
     });
+    // "Used" means this chip is in play — apply it as the exclusive GW chip so BB/TC projections update.
     if (status === "used") {
-      setActiveChipState((current) => {
-        if (current !== name) return current;
-        saveActiveChip(null);
-        return null;
-      });
+      saveActiveChip(name);
+      setActiveChipState(name);
+      return;
     }
+    // Cleared back to available / unknown — drop from this GW if it was selected.
+    setActiveChipState((current) => {
+      if (current !== name) return current;
+      saveActiveChip(null);
+      return null;
+    });
   }, []);
 
   const setActiveChip = useCallback((chip: ChipName | null) => {
-    // Exclusive: only one chip can be played per GW.
-    const next =
-      chip === "Wildcard" || chip === "Free Hit" || chip === "Bench Boost" || chip === "Triple Captain"
-        ? chip
-        : null;
+    const next = normalizeChip(chip);
     saveActiveChip(next);
     setActiveChipState(next);
   }, []);

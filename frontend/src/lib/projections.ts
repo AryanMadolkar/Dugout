@@ -17,6 +17,19 @@ function round1(n: number) {
   return Math.round(n * 10) / 10;
 }
 
+/** Accept common aliases from UI / scan / storage. */
+export function normalizeChip(chip: ChipName | string | null | undefined): ChipName | null {
+  if (!chip) return null;
+  const raw = String(chip).trim();
+  const lower = raw.toLowerCase().replace(/[_-]+/g, " ");
+  if (lower === "triple captain" || lower === "tc") return "Triple Captain";
+  if (lower === "bench boost" || lower === "bb") return "Bench Boost";
+  if (lower === "free hit" || lower === "fh") return "Free Hit";
+  if (lower === "wildcard" || lower === "wc") return "Wildcard";
+  if ((PLAYABLE_CHIPS as readonly string[]).includes(raw)) return raw as ChipName;
+  return null;
+}
+
 /**
  * Dugout GW expected points (single-player, before captain multiplier).
  */
@@ -51,7 +64,7 @@ export function estimatePlayerXp(player: SquadPlayer): number {
 
 /** Captain ×2 by default; ×3 with Triple Captain. */
 export function captainMultiplier(activeChip: ChipName | null): number {
-  return activeChip === "Triple Captain" ? 3 : 2;
+  return normalizeChip(activeChip) === "Triple Captain" ? 3 : 2;
 }
 
 /** Who receives the captain multiplier (scan C, else highest xP starter). */
@@ -85,10 +98,11 @@ export function estimateSquadXp(
   bench: SquadPlayer[] = [],
   activeChip: ChipName | null = null,
 ): number {
+  const chip = normalizeChip(activeChip);
   const captainId = resolveCaptainId(starters);
-  let total = starters.reduce((sum, p) => sum + estimatePlayerGwXp(p, activeChip, captainId), 0);
+  let total = starters.reduce((sum, p) => sum + estimatePlayerGwXp(p, chip, captainId), 0);
 
-  if (activeChip === "Bench Boost") {
+  if (chip === "Bench Boost") {
     total += bench.reduce((sum, p) => sum + estimatePlayerXp(p), 0);
   }
 
@@ -96,9 +110,10 @@ export function estimateSquadXp(
 }
 
 export function projectionChipLabel(activeChip: ChipName | null): string {
-  if (activeChip === "Triple Captain") return "XI + captain ×3";
-  if (activeChip === "Bench Boost") return "XI + captain ×2 + bench";
-  if (activeChip === "Free Hit") return "XI + captain ×2 · Free Hit";
-  if (activeChip === "Wildcard") return "XI + captain ×2 · Wildcard";
+  const chip = normalizeChip(activeChip);
+  if (chip === "Triple Captain") return "XI + captain ×3";
+  if (chip === "Bench Boost") return "XI + captain ×2 + bench";
+  if (chip === "Free Hit") return "XI + captain ×2 · Free Hit";
+  if (chip === "Wildcard") return "XI + captain ×2 · Wildcard";
   return "XI + captain ×2";
 }

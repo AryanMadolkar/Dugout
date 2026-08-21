@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
-import type { ChipName } from "@/lib/dashboard-data";
 import { fetchOverview } from "@/lib/api";
-import { PLAYABLE_CHIPS, projectionChipLabel } from "@/lib/projections";
+import { PLAYABLE_CHIPS, normalizeChip, projectionChipLabel } from "@/lib/projections";
 import { formatScanTime, projectedPoints } from "@/lib/squad-storage";
 
 export function TeamHeader() {
@@ -30,8 +29,8 @@ export function TeamHeader() {
   const projected = projectedPoints(starters, bench, activeChip);
   const baseProjected = projectedPoints(starters, bench, null);
   const chipDelta = Math.round((projected - baseProjected) * 10) / 10;
+  const chip = normalizeChip(activeChip);
 
-  const canPlay = (chip: ChipName) => chipUsage[chip] !== "used";
   const short: Record<string, string> = {
     Wildcard: "WC",
     "Free Hit": "FH",
@@ -73,6 +72,7 @@ export function TeamHeader() {
               : ""}
           </p>
           <p
+            key={`xp-${chip ?? "none"}-${projected}`}
             className="text-[62px] font-extrabold leading-none tracking-tighter"
             style={{
               background: "linear-gradient(135deg, var(--navy) 0%, #2a5070 100%)",
@@ -85,8 +85,13 @@ export function TeamHeader() {
           </p>
           <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
             Dugout xP ({projectionChipLabel(activeChip)})
-            {chipDelta > 0 ? (
-              <span className="ml-1 font-semibold text-[var(--positive)]">+{chipDelta.toFixed(1)}</span>
+            {chipDelta !== 0 ? (
+              <span
+                className={`ml-1 font-semibold ${chipDelta > 0 ? "text-[var(--positive)]" : "text-[var(--coral)]"}`}
+              >
+                {chipDelta > 0 ? "+" : ""}
+                {chipDelta.toFixed(1)}
+              </span>
             ) : null}
           </p>
           <div className="mt-3 flex flex-wrap justify-center gap-1">
@@ -94,30 +99,31 @@ export function TeamHeader() {
               type="button"
               onClick={() => setActiveChip(null)}
               className={`control px-2 py-1 text-[10px] font-semibold ${
-                !activeChip ? "bg-[var(--navy)] text-white" : "border border-[var(--border)] hover:bg-white"
+                !chip ? "bg-[var(--navy)] text-white" : "border border-[var(--border)] hover:bg-white"
               }`}
             >
               None
             </button>
-            {PLAYABLE_CHIPS.map((chip) => {
-              const disabled = !canPlay(chip);
-              const selected = activeChip === chip;
+            {PLAYABLE_CHIPS.map((name) => {
+              const selected = chip === name;
+              const seasonUsed = chipUsage[name] === "used";
               return (
                 <button
-                  key={chip}
+                  key={name}
                   type="button"
-                  disabled={disabled}
-                  title={disabled ? `${chip} marked used` : `Play ${chip} this GW only`}
-                  onClick={() => setActiveChip(selected ? null : chip)}
+                  title={
+                    seasonUsed
+                      ? `${name} marked used — still applies to this GW projection when selected`
+                      : `Play ${name} this GW`
+                  }
+                  onClick={() => setActiveChip(selected ? null : name)}
                   className={`control px-2 py-1 text-[10px] font-semibold ${
                     selected
                       ? "bg-[var(--navy)] text-white"
-                      : disabled
-                        ? "cursor-not-allowed border border-[var(--border)] opacity-40"
-                        : "border border-[var(--border)] hover:bg-white"
+                      : "border border-[var(--border)] hover:bg-white"
                   }`}
                 >
-                  {short[chip]}
+                  {short[name]}
                 </button>
               );
             })}
@@ -126,8 +132,8 @@ export function TeamHeader() {
 
         <div className="flex flex-1 flex-col justify-center gap-4 p-5">
           <p className="text-[13px] text-[var(--text-secondary)]">
-            Pick one chip for this GW (None / WC / FH / BB / TC). Projected points and AI verdict update automatically.
-            Chip status can also come from your squad screenshot.
+            Pick TC or BB for this GW to recalculate projected points (captain ×3 or +bench). Season Used also
+            activates that chip for projections.
           </p>
           <div className="flex gap-2">
             <Link
@@ -136,12 +142,12 @@ export function TeamHeader() {
             >
               Re-scan
             </Link>
-            <Link
-              href="/chips"
+            <a
+              href="#chip-strategy"
               className="control border border-[var(--border)] bg-white px-3 py-2 text-[12px] font-semibold hover:bg-[var(--canvas)]"
             >
               Chip strategy
-            </Link>
+            </a>
           </div>
         </div>
       </div>

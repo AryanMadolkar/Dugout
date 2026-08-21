@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useDashboard } from "@/context/DashboardContext";
-import { estimatePlayerGwXp, estimatePlayerXp, resolveCaptainId } from "@/lib/projections";
+import { estimatePlayerGwXp, estimatePlayerXp, normalizeChip, resolveCaptainId } from "@/lib/projections";
 import { SectionHead } from "./ui/SectionHead";
 
 export function CaptainPanel() {
@@ -37,7 +37,7 @@ export function CaptainPanel() {
   const pick = captain ?? alternatives[0]?.player ?? null;
   const pickXp = pick ? estimatePlayerXp(pick) : 0;
   const displayXp = pick ? estimatePlayerGwXp(pick, activeChip, captainId) : 0;
-  const mult = activeChip === "Triple Captain" ? 3 : 2;
+  const mult = normalizeChip(activeChip) === "Triple Captain" ? 3 : 2;
 
   if (!pick) {
     return (
