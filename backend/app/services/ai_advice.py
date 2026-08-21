@@ -250,3 +250,204 @@ Return 8-15 picks ranked best first. rating 1-99. next4Xp is your estimate for n
         "source": "gemini",
         "gameweek": gw.id if gw else None,
     }
+
+
+def _score_owned(p: dict[str, Any]) -> float:
+    return float(p.get("form") or 0) * 0.45 + float(p.get("xp") or 0) * 0.55
+
+
+def _heuristic_transfers(
+    squad: list[dict[str, Any]],
+    candidates: list[dict[str, Any]],
+    gw_id: int | None,
+) -> dict[str, Any]:
+    owned_names = {str(p.get("name")) for p in squad}
+    by_pos: dict[str, list[dict[str, Any]]] = {"GKP": [], "DEF": [], "MID": [], "FWD": []}
+    for p in squad:
+        pos = str(p.get("position") or "")
+        if pos in by_pos:
+            by_pos[pos].append(p)
+
+    cand_by_pos: dict[str, list[dict[str, Any]]] = {"GKP": [], "DEF": [], "MID": [], "FWD": []}
+    for c in candidates:
+        pos = str(c.get("position") or "")
+        if pos in cand_by_pos and c.get("name") not in owned_names:
+            cand_by_pos[pos].append(c)
+
+    moves: list[dict[str, Any]] = []
+    used_out: set[str] = set()
+    used_in: set[str] = set()
+
+    for pos in ("FWD", "MID", "DEF", "GKP"):
+        owned = sorted(by_pos[pos], key=_score_owned)
+        pool = sorted(
+            cand_by_pos[pos],
+            key=lambda c: float(c.get("ep_next") or 0),
+            reverse=True,
+        )
+        if not owned or not pool:
+            continue
+        out_p = owned[0]
+        out_name = str(out_p.get("name"))
+        if out_name in used_out:
+            continue
+        out_price = float(out_p.get("price") or 0)
+        out_xp = float(out_p.get("xp") or 0)
+        best: dict[str, Any] | None = None
+        for c in pool:
+            in_name = str(c.get("name"))
+            if in_name in used_in:
+                continue
+            in_price = float(c.get("price") or 0)
+            in_xp = float(c.get("ep_next") or 0)
+            # Prefer upgrades / lateral moves within 1.5m and clearly better xP
+            if in_price > out_price + 1.5:
+                continue
+            if in_xp < out_xp + 0.3:
+                continue
+            best = c
+            break
+        if not best:
+            continue
+        in_name = str(best.get("name"))
+        in_price = float(best.get("price") or 0)
+        in_xp = float(best.get("ep_next") or 0)
+        delta = round(in_price - out_price, 1)
+        moves.append(
+            {
+                "out": out_name,
+                "in": in_name,
+                "outClub": out_p.get("club"),
+                "inClub": best.get("club"),
+                "position": pos,
+                "outPrice": out_price,
+                "inPrice": in_price,
+                "priceDelta": delta,
+                "outXp": out_xp,
+                "inXp": in_xp,
+                "reason": (
+                    f"{in_name} ({best.get('club')}) projects {in_xp:.1f} xP vs "
+                    f"{out_name}'s {out_xp:.1f} · £{delta:+.1f}m"
+                ),
+            }
+        )
+        used_out.add(out_name)
+        used_in.add(in_name)
+        if len(moves) >= 3:
+            break
+
+    if not moves:
+        return {
+            "headline": "No urgent transfers",
+            "summary": "Your squad looks balanced on FPL form/xP. Hold unless you need to free cash or chase a differential.",
+            "action": "Hold",
+            "confidence": 50,
+            "transfers": [],
+            "source": "heuristic",
+            "gameweek": gw_id,
+        }
+
+    top = moves[0]
+    return {
+        "headline": f"{top['out']} → {top['in']}",
+        "summary": f"Top {len(moves)} move{'s' if len(moves) != 1 else ''} by position xP/form. Gemini unavailable — Dugout heuristic only.",
+        "action": "Transfer",
+        "confidence": 48,
+        "transfers": moves,
+        "source": "heuristic",
+        "gameweek": gw_id,
+    }
+
+
+def generate_transfer_advice(
+    db: Session,
+    squad: list[dict[str, Any]],
+    chip: str | None = None,
+) -> dict[str, Any]:
+    """Transfer-focused advice for the Transfers page (Gemini with heuristic fallback)."""
+    _ensure_players(db)
+    gw = current_gameweek(db)
+    gw_label = f"GW{gw.id}" if gw else "the next gameweek"
+
+    owned_ids = {int(p["fplId"]) for p in squad if p.get("fplId") is not None}
+    pool = (
+        db.scalars(
+            select(Player)
+            .options(joinedload(Player.team))
+            .order_by(Player.ep_next.desc().nullslast())
+            .limit(80)
+        )
+        .unique()
+        .all()
+    )
+    candidates = [_player_brief(p) for p in pool if p.id not in owned_ids][:40]
+
+    prompt = f"""You are an elite Fantasy Premier League transfer analyst.
+Upcoming {gw_label}. Active chip: {chip or "none"}.
+Recommend 1-3 concrete transfers for THIS manager only. Same-position swaps preferred. Do not invent players.
+
+Squad JSON:
+{_squad_context(squad)}
+
+Candidates JSON (must pick "in" from these):
+{json.dumps(candidates, ensure_ascii=False)}
+
+Return strict JSON:
+{{
+  "headline": "short title e.g. Maguire → Gabriel",
+  "summary": "2 sentences on transfer priority for {gw_label}",
+  "action": "Hold" | "Transfer" | "Hit (-4)",
+  "confidence": 0-100,
+  "transfers": [
+    {{
+      "out": "web_name",
+      "in": "web_name",
+      "outClub": "ABC",
+      "inClub": "XYZ",
+      "position": "DEF",
+      "outPrice": 5.5,
+      "inPrice": 6.0,
+      "priceDelta": 0.5,
+      "outXp": 3.2,
+      "inXp": 4.8,
+      "reason": "one line why"
+    }}
+  ],
+  "source": "gemini"
+}}
+If no good moves, action Hold and empty transfers. Max 3 transfers. Prefer highest value upgrades.
+"""
+
+    try:
+        data = gemini_generate_json(prompt, temperature=0.3)
+        if not isinstance(data, dict):
+            raise RuntimeError("Gemini transfers were not a JSON object")
+        transfers = []
+        for raw in data.get("transfers") or []:
+            if not isinstance(raw, dict):
+                continue
+            transfers.append(
+                {
+                    "out": raw.get("out"),
+                    "in": raw.get("in"),
+                    "outClub": raw.get("outClub"),
+                    "inClub": raw.get("inClub"),
+                    "position": raw.get("position"),
+                    "outPrice": raw.get("outPrice"),
+                    "inPrice": raw.get("inPrice"),
+                    "priceDelta": raw.get("priceDelta"),
+                    "outXp": raw.get("outXp"),
+                    "inXp": raw.get("inXp"),
+                    "reason": str(raw.get("reason") or ""),
+                }
+            )
+        data["transfers"] = transfers
+        data["source"] = "gemini"
+        data["gameweek"] = gw.id if gw else None
+        data["headline"] = str(data.get("headline") or "Transfer advice")
+        data["summary"] = str(data.get("summary") or "")
+        data["action"] = str(data.get("action") or ("Transfer" if transfers else "Hold"))
+        data["confidence"] = int(data.get("confidence") or 55)
+        return data
+    except Exception:
+        return _heuristic_transfers(squad, candidates, gw.id if gw else None)

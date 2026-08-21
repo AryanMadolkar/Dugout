@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.api.schemas import (
     AiPicksOut,
     AiPicksRequest,
+    AiTransferAdviceOut,
     AiVerdictOut,
     AiVerdictRequest,
     FixtureOut,
@@ -21,7 +22,7 @@ from app.api.schemas import (
 )
 from app.db.models import Fixture, Gameweek, IngestRun, Player, Team
 from app.db.session import get_db
-from app.services.ai_advice import generate_ai_picks, generate_verdict
+from app.services.ai_advice import generate_ai_picks, generate_transfer_advice, generate_verdict
 from app.services.fpl_client import FPLClient
 from app.services.ingestion import current_gameweek, sync_bootstrap_and_fixtures
 
@@ -195,10 +196,27 @@ def ai_verdict(body: AiVerdictRequest, db: Session = Depends(get_db)) -> AiVerdi
             source=str(result.get("source") or "gemini"),
             gameweek=result.get("gameweek"),
         )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Gemini verdict failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"AI verdict failed: {exc}") from exc
+
+
+@router.post("/ai/transfers", response_model=AiTransferAdviceOut)
+def ai_transfers(body: AiVerdictRequest, db: Session = Depends(get_db)) -> AiTransferAdviceOut:
+    """Transfer-page advice — not the same as home AI Verdict."""
+    try:
+        squad = [p.model_dump() for p in body.squad]
+        result = generate_transfer_advice(db, squad, body.activeChip)
+        return AiTransferAdviceOut(
+            headline=str(result.get("headline") or "Transfer advice"),
+            summary=str(result.get("summary") or ""),
+            action=str(result.get("action") or "Hold"),
+            confidence=int(result.get("confidence") or 50),
+            transfers=list(result.get("transfers") or []),
+            source=str(result.get("source") or "gemini"),
+            gameweek=result.get("gameweek"),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Transfer advice failed: {exc}") from exc
 
 
 @router.post("/ai/picks", response_model=AiPicksOut)
@@ -208,13 +226,11 @@ def ai_picks(body: AiPicksRequest, db: Session = Depends(get_db)) -> AiPicksOut:
         return AiPicksOut(
             summary=str(result.get("summary") or ""),
             picks=result.get("picks") or [],
-            source="gemini",
+            source=str(result.get("source") or "gemini"),
             gameweek=result.get("gameweek"),
         )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Gemini picks failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"AI picks failed: {exc}") from exc
 
 
 @router.get("/players/{player_id}/history", response_model=PlayerHistoryOut)

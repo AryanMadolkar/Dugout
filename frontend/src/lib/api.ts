@@ -114,6 +114,52 @@ export async function fetchAiVerdict(squad: unknown[], activeChip: string | null
   return response.json() as Promise<AiVerdict>;
 }
 
+export type TransferAdviceMove = {
+  out?: string | null;
+  in?: string | null;
+  outClub?: string | null;
+  inClub?: string | null;
+  position?: string | null;
+  outPrice?: number | null;
+  inPrice?: number | null;
+  priceDelta?: number | null;
+  outXp?: number | null;
+  inXp?: number | null;
+  reason?: string;
+};
+
+export type TransferAdvice = {
+  headline: string;
+  summary: string;
+  action: string;
+  confidence: number;
+  transfers: TransferAdviceMove[];
+  source: string;
+  gameweek: number | null;
+};
+
+export async function fetchTransferAdvice(
+  squad: unknown[],
+  activeChip: string | null,
+): Promise<TransferAdvice> {
+  const response = await fetch(`${getApiUrl()}/api/ai/transfers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ squad, activeChip }),
+  });
+  if (!response.ok) {
+    let detail = `Transfer advice failed (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<TransferAdvice>;
+}
+
 export async function triggerIngest(): Promise<IngestResult> {
   const response = await fetch(`${getApiUrl()}/api/ingest`, { method: "POST" });
   if (!response.ok) {

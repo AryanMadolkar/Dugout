@@ -159,6 +159,16 @@ class AiVerdictOut(BaseModel):
     gameweek: int | None = None
 
 
+class AiTransferAdviceOut(BaseModel):
+    headline: str
+    summary: str
+    action: str
+    confidence: int = 50
+    transfers: list[dict] = []
+    source: str = "gemini"
+    gameweek: int | None = None
+
+
 class AiPicksRequest(BaseModel):
     ownedIds: list[int] = []
     position: str | None = None
