@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { AppLayout } from "@/components/v5/AppLayout";
-import { BestAvailablePicks } from "@/components/v5/BestAvailablePicks";
 import { BenchStrip } from "@/components/v5/BenchStrip";
 import { ComparisonPanel } from "@/components/v5/ComparisonPanel";
 import { FixtureWatchPanel } from "@/components/v5/FixtureWatchPanel";
@@ -59,7 +58,6 @@ export default function MyTeamPage() {
           <PlayerDetailPanel />
         </div>
       </div>
-      <BestAvailablePicks />
       <ComparisonPanel />
       <FixtureWatchPanel />
     </AppLayout>

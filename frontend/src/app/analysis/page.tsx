@@ -10,7 +10,7 @@ import { useDashboard } from "@/context/DashboardContext";
 import { projectedPoints } from "@/lib/squad-storage";
 
 export default function AnalysisPage() {
-  const { hasSquad, starters } = useDashboard();
+  const { hasSquad, starters, bench, activeChip } = useDashboard();
 
   if (!hasSquad) {
     return (
@@ -33,7 +33,7 @@ export default function AnalysisPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Squad xP (XI)" value={squadXp.toFixed(1)} />
         <StatCard label="Avg form" value={avgForm.toFixed(1)} />
-        <StatCard label="Projected GW" value={projectedPoints(starters).toFixed(1)} />
+        <StatCard label="Projected GW" value={projectedPoints(starters, bench, activeChip).toFixed(1)} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <TeamRatingPanel />

@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { useDashboard } from "@/context/DashboardContext";
-import type { ChipAvailability } from "@/lib/dashboard-data";
+import type { ChipAvailability, ChipName } from "@/lib/dashboard-data";
 import { CHIP_NAMES } from "@/lib/dashboard-data";
 import { recommendChipStrategy } from "@/lib/chip-strategy";
+import { PLAYABLE_CHIPS } from "@/lib/projections";
 import { SectionHead } from "./ui/SectionHead";
 
 type Props = {
@@ -18,10 +19,15 @@ const STATUS_LABEL: Record<ChipAvailability, string> = {
   unknown: "Not set",
 };
 
-const OPTIONS: ChipAvailability[] = ["available", "used"];
+const SHORT: Record<ChipName, string> = {
+  Wildcard: "WC",
+  "Free Hit": "FH",
+  "Bench Boost": "BB",
+  "Triple Captain": "TC",
+};
 
 export function ChipStrategyPanel({ expanded }: Props) {
-  const { chipUsage, setChipAvailability, starters, bench, hasSquad } = useDashboard();
+  const { chipUsage, setChipAvailability, starters, bench, hasSquad, activeChip, setActiveChip } = useDashboard();
 
   const recommendation = useMemo(
     () => (hasSquad ? recommendChipStrategy(starters, bench, chipUsage) : null),
@@ -33,52 +39,66 @@ export function ChipStrategyPanel({ expanded }: Props) {
       <SectionHead title="Chip strategy" />
       <div className="p-4">
         {recommendation ? (
-          <div
-            className="mb-3 rounded-[3px] border px-3 py-3"
-            style={{
-              borderColor: recommendation.chip === "Hold" ? "var(--border)" : "var(--coral)",
-              background:
-                recommendation.chip === "Hold"
-                  ? "var(--canvas)"
-                  : "linear-gradient(135deg, #fff8f0 0%, #fff 70%)",
-            }}
-          >
-            <p className="font-label text-[10px] text-[var(--coral)]">Best for your squad</p>
-            <p className="mt-1 text-[15px] font-extrabold text-[var(--navy)]">{recommendation.headline}</p>
+          <div className="mb-3 rounded-[3px] border border-[var(--border)] bg-[var(--canvas)] px-3 py-3">
+            <p className="font-label text-[10px] text-[var(--text-secondary)]">Suggestion</p>
+            <p className="mt-1 text-[14px] font-extrabold text-[var(--navy)]">{recommendation.headline}</p>
             <p className="mt-1 text-[12px] leading-relaxed text-[var(--text-secondary)]">{recommendation.reason}</p>
-            {recommendation.alternatives.length > 0 ? (
-              <ul className="mt-2 space-y-1">
-                {recommendation.alternatives.map((alt) => (
-                  <li key={alt.chip} className="text-[11px] text-[var(--text-secondary)]">
-                    <span className="font-semibold text-[var(--navy)]">{alt.chip}</span> · {alt.note}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
           </div>
         ) : (
           <p className="mb-3 rounded-[3px] bg-[var(--canvas)] px-3 py-2 text-[13px] text-[var(--text-secondary)]">
-            Scan your squad to get a chip recommendation based on fixtures and projected points.
+            Scan your squad to get a chip suggestion. Select exactly one chip for this GW below.
           </p>
         )}
 
-        <p className="mb-2 text-[11px] text-[var(--text-secondary)]">Mark chips you have already used:</p>
+        <p className="mb-2 text-[11px] text-[var(--text-secondary)]">
+          This GW chip (one only) — projections update automatically:
+        </p>
+        <div className="mb-4 flex flex-wrap gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveChip(null)}
+            className={`control px-2.5 py-1.5 text-[11px] font-semibold ${
+              !activeChip ? "bg-[var(--navy)] text-white" : "border border-[var(--border)]"
+            }`}
+          >
+            None
+          </button>
+          {PLAYABLE_CHIPS.map((chip) => {
+            const spent = chipUsage[chip] === "used";
+            const selected = activeChip === chip;
+            return (
+              <button
+                key={chip}
+                type="button"
+                disabled={spent}
+                title={spent ? `${chip} already used this season` : `Play ${chip} this GW`}
+                onClick={() => setActiveChip(selected ? null : chip)}
+                className={`control px-2.5 py-1.5 text-[11px] font-semibold ${
+                  selected
+                    ? "bg-[var(--navy)] text-white"
+                    : spent
+                      ? "cursor-not-allowed border border-[var(--border)] opacity-40"
+                      : "border border-[var(--border)] hover:bg-[var(--canvas)]"
+                }`}
+              >
+                {SHORT[chip]}
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="mb-2 text-[11px] text-[var(--text-secondary)]">Season status (from scan or manual):</p>
         <div className={`grid gap-2 ${expanded ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-2"}`}>
           {CHIP_NAMES.map((name) => {
             const status = chipUsage[name];
-            const isRecommended = recommendation?.chip === name;
+            const playing = activeChip === name;
             return (
-              <div
-                key={name}
-                className={`rounded-[3px] border p-3 text-left ${
-                  isRecommended ? "border-[var(--coral)] bg-[var(--fdr-hard)]/20" : "border-[var(--border)]"
-                }`}
-              >
+              <div key={name} className="rounded-[3px] border border-[var(--border)] p-3 text-left">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-[13px] font-bold">
                     {name}
-                    {isRecommended ? (
-                      <span className="ml-1 text-[9px] font-extrabold text-[var(--coral)]">BEST</span>
+                    {playing ? (
+                      <span className="ml-1 text-[9px] font-bold text-[var(--navy)]">THIS GW</span>
                     ) : null}
                   </p>
                   <span
@@ -94,7 +114,7 @@ export function ChipStrategyPanel({ expanded }: Props) {
                   </span>
                 </div>
                 <div className="mt-2 flex gap-1">
-                  {OPTIONS.map((option) => (
+                  {(["available", "used"] as const).map((option) => (
                     <button
                       key={option}
                       type="button"

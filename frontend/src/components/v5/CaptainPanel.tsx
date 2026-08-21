@@ -2,11 +2,11 @@
 
 import { useMemo } from "react";
 import { useDashboard } from "@/context/DashboardContext";
-import { estimatePlayerXp } from "@/lib/projections";
+import { estimatePlayerGwXp, estimatePlayerXp, resolveCaptainId } from "@/lib/projections";
 import { SectionHead } from "./ui/SectionHead";
 
 export function CaptainPanel() {
-  const { starters, hasSquad } = useDashboard();
+  const { starters, hasSquad, activeChip } = useDashboard();
 
   const ranked = useMemo(
     () =>
@@ -15,8 +15,15 @@ export function CaptainPanel() {
         .sort((a, b) => b.xp - a.xp),
     [starters],
   );
-  const captain = useMemo(() => starters.find((p) => p.isCaptain) ?? null, [starters]);
-  const alternatives = useMemo(() => ranked.filter((r) => !r.player.isCaptain).slice(0, 3), [ranked]);
+  const captainId = useMemo(() => resolveCaptainId(starters), [starters]);
+  const captain = useMemo(
+    () => starters.find((p) => p.id === captainId) ?? null,
+    [starters, captainId],
+  );
+  const alternatives = useMemo(
+    () => ranked.filter((r) => r.player.id !== captainId).slice(0, 3),
+    [ranked, captainId],
+  );
 
   if (!hasSquad) {
     return (
@@ -29,6 +36,8 @@ export function CaptainPanel() {
 
   const pick = captain ?? alternatives[0]?.player ?? null;
   const pickXp = pick ? estimatePlayerXp(pick) : 0;
+  const displayXp = pick ? estimatePlayerGwXp(pick, activeChip, captainId) : 0;
+  const mult = activeChip === "Triple Captain" ? 3 : 2;
 
   if (!pick) {
     return (
@@ -56,14 +65,15 @@ export function CaptainPanel() {
               <p className="text-[20px] font-extrabold text-[var(--navy)]">{pick.name}</p>
               <p className="font-label mt-0.5 text-[11px] text-[var(--text-secondary)]">
                 {pick.club}
-                {captain ? " · detected from scan" : " · highest xP in XI"}
+                {pick.isCaptain ? " · detected from scan" : " · highest xP in XI"}
+                {` · counts ×${mult}`}
               </p>
             </div>
             <span
               className="flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-extrabold text-white"
               style={{ background: "linear-gradient(135deg, var(--coral), var(--gold))" }}
             >
-              C
+              {activeChip === "Triple Captain" ? "TC" : "C"}
             </span>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -76,7 +86,12 @@ export function CaptainPanel() {
               <p className="text-[13px] font-extrabold">{pick.ownership.toFixed(1)}%</p>
             </div>
           </div>
-          <p className="mt-3 text-right text-[24px] font-extrabold text-[var(--positive)]">{pickXp.toFixed(1)} xP</p>
+          <p className="mt-3 text-right text-[24px] font-extrabold text-[var(--positive)]">
+            {displayXp.toFixed(1)} xP
+            <span className="ml-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+              · {pickXp.toFixed(1)} × {mult}
+            </span>
+          </p>
         </div>
 
         {alternatives.filter((a) => a.player.id !== pick.id).length > 0 ? (

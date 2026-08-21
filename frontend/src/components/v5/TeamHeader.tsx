@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
+import type { ChipName } from "@/lib/dashboard-data";
 import { fetchOverview } from "@/lib/api";
+import { PLAYABLE_CHIPS, projectionChipLabel } from "@/lib/projections";
 import { formatScanTime, projectedPoints } from "@/lib/squad-storage";
 
 export function TeamHeader() {
-  const { squad, starters } = useDashboard();
+  const { squad, starters, bench, activeChip, setActiveChip, chipUsage } = useDashboard();
   const [gameweek, setGameweek] = useState<number | null>(null);
   const [deadline, setDeadline] = useState<string | null>(null);
 
@@ -25,8 +27,17 @@ export function TeamHeader() {
 
   if (!squad) return null;
 
-  const projected = projectedPoints(starters);
+  const projected = projectedPoints(starters, bench, activeChip);
+  const baseProjected = projectedPoints(starters, bench, null);
+  const chipDelta = Math.round((projected - baseProjected) * 10) / 10;
 
+  const canPlay = (chip: ChipName) => chipUsage[chip] !== "used";
+  const short: Record<string, string> = {
+    Wildcard: "WC",
+    "Free Hit": "FH",
+    "Bench Boost": "BB",
+    "Triple Captain": "TC",
+  };
   return (
     <div className="panel-elevated overflow-hidden">
       <div className="flex flex-wrap">
@@ -43,12 +54,12 @@ export function TeamHeader() {
         </div>
 
         <div
-          className="flex flex-col items-center justify-center border-b border-[var(--border)] px-8 py-5 sm:border-b-0 sm:border-r"
+          className="flex min-w-[220px] flex-col items-center justify-center border-b border-[var(--border)] px-6 py-5 sm:border-b-0 sm:border-r"
           style={{
             background: "linear-gradient(160deg, var(--fdr-easy) 0%, #fff 60%)",
           }}
         >
-          <p className="font-label text-[11px] text-[var(--positive)]">
+          <p className="font-label text-center text-[11px] text-[var(--positive)]">
             Projected · {gameweek ? `GW${gameweek}` : "this GW"}
             {deadline
               ? ` · deadline ${new Intl.DateTimeFormat("en-GB", {
@@ -72,13 +83,51 @@ export function TeamHeader() {
           >
             {projected.toFixed(1)}
           </p>
-          <p className="mt-1 text-[12px] text-[var(--text-secondary)]">Dugout xP (XI + captain)</p>
+          <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+            Dugout xP ({projectionChipLabel(activeChip)})
+            {chipDelta > 0 ? (
+              <span className="ml-1 font-semibold text-[var(--positive)]">+{chipDelta.toFixed(1)}</span>
+            ) : null}
+          </p>
+          <div className="mt-3 flex flex-wrap justify-center gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveChip(null)}
+              className={`control px-2 py-1 text-[10px] font-semibold ${
+                !activeChip ? "bg-[var(--navy)] text-white" : "border border-[var(--border)] hover:bg-white"
+              }`}
+            >
+              None
+            </button>
+            {PLAYABLE_CHIPS.map((chip) => {
+              const disabled = !canPlay(chip);
+              const selected = activeChip === chip;
+              return (
+                <button
+                  key={chip}
+                  type="button"
+                  disabled={disabled}
+                  title={disabled ? `${chip} marked used` : `Play ${chip} this GW only`}
+                  onClick={() => setActiveChip(selected ? null : chip)}
+                  className={`control px-2 py-1 text-[10px] font-semibold ${
+                    selected
+                      ? "bg-[var(--navy)] text-white"
+                      : disabled
+                        ? "cursor-not-allowed border border-[var(--border)] opacity-40"
+                        : "border border-[var(--border)] hover:bg-white"
+                  }`}
+                >
+                  {short[chip]}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex flex-1 flex-col justify-center gap-4 p-5">
           <p className="text-[13px] text-[var(--text-secondary)]">
-            Squad loaded from your screenshot. Transfer and chip recommendations will use this squad once the optimiser
-            is connected.
+            Pick one chip for this GW (None / WC / FH / BB / TC). Projected points and AI verdict update automatically.
+            Chip status can also come from your squad screenshot.
           </p>
           <div className="flex gap-2">
             <Link
@@ -86,6 +135,12 @@ export function TeamHeader() {
               className="control border border-[var(--border)] bg-white px-3 py-2 text-[12px] font-semibold hover:bg-[var(--canvas)]"
             >
               Re-scan
+            </Link>
+            <Link
+              href="/chips"
+              className="control border border-[var(--border)] bg-white px-3 py-2 text-[12px] font-semibold hover:bg-[var(--canvas)]"
+            >
+              Chip strategy
             </Link>
           </div>
         </div>

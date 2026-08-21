@@ -5,6 +5,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.schemas import (
+    AiPicksOut,
+    AiPicksRequest,
+    AiVerdictOut,
+    AiVerdictRequest,
     FixtureOut,
     GameweekOut,
     IngestResult,
@@ -17,6 +21,7 @@ from app.api.schemas import (
 )
 from app.db.models import Fixture, Gameweek, IngestRun, Player, Team
 from app.db.session import get_db
+from app.services.ai_advice import generate_ai_picks, generate_verdict
 from app.services.fpl_client import FPLClient
 from app.services.ingestion import current_gameweek, sync_bootstrap_and_fixtures
 
@@ -135,6 +140,13 @@ def list_players(
     limit: int = Query(default=50, ge=1, le=500),
     sort: str = Query(default="total_points"),
 ) -> list[PlayerOut]:
+    if db.scalar(select(func.count(Player.id))) == 0:
+        try:
+            sync_bootstrap_and_fixtures(db)
+            db.commit()
+        except Exception:
+            db.rollback()
+
     stmt = select(Player).options(joinedload(Player.team))
     if team_id:
         stmt = stmt.where(Player.team_id == team_id)
@@ -157,6 +169,44 @@ def list_players(
     }.get(sort, Player.total_points)
     stmt = stmt.order_by(sort_column.desc().nullslast()).limit(limit)
     return [_player_out(player) for player in db.scalars(stmt).unique().all()]
+
+
+@router.post("/ai/verdict", response_model=AiVerdictOut)
+def ai_verdict(body: AiVerdictRequest, db: Session = Depends(get_db)) -> AiVerdictOut:
+    try:
+        squad = [p.model_dump() for p in body.squad]
+        result = generate_verdict(db, squad, body.activeChip)
+        return AiVerdictOut(
+            headline=str(result.get("headline") or "Gemini squad verdict"),
+            summary=str(result.get("summary") or ""),
+            action=str(result.get("action") or "Hold"),
+            confidence=int(result.get("confidence") or 50),
+            transfers=list(result.get("transfers") or []),
+            captain=result.get("captain") if isinstance(result.get("captain"), dict) else None,
+            risks=[str(r) for r in (result.get("risks") or [])],
+            source="gemini",
+            gameweek=result.get("gameweek"),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini verdict failed: {exc}") from exc
+
+
+@router.post("/ai/picks", response_model=AiPicksOut)
+def ai_picks(body: AiPicksRequest, db: Session = Depends(get_db)) -> AiPicksOut:
+    try:
+        result = generate_ai_picks(db, body.ownedIds, body.position)
+        return AiPicksOut(
+            summary=str(result.get("summary") or ""),
+            picks=result.get("picks") or [],
+            source="gemini",
+            gameweek=result.get("gameweek"),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini picks failed: {exc}") from exc
 
 
 @router.get("/players/{player_id}/history", response_model=PlayerHistoryOut)
@@ -261,7 +311,10 @@ async def scan_squad(
     db: Session = Depends(get_db),
 ) -> ScanResultOut:
     if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Upload a PNG, JPG, or WebP screenshot.")
+        # iOS often omits MIME type for Photos/screenshots — allow by filename.
+        name = (file.filename or "").lower()
+        if not name.endswith((".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif")):
+            raise HTTPException(status_code=400, detail="Upload a PNG, JPG, or WebP screenshot.")
     try:
         from app.services.scan import scan_squad_image
 

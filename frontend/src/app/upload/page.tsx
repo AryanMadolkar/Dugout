@@ -19,7 +19,11 @@ export default function UploadPage() {
   const { setPendingScan } = useDashboard();
 
   const onFile = useCallback((next: File | undefined) => {
-    if (!next?.type.startsWith("image/")) return;
+    if (!next) return;
+    const okType = next.type.startsWith("image/") || !next.type;
+    const name = next.name.toLowerCase();
+    const okName = /\.(png|jpe?g|webp|heic|heif)$/.test(name);
+    if (!okType && !okName) return;
     setFile(next);
     setPreview(URL.createObjectURL(next));
     setError(null);
@@ -92,7 +96,7 @@ export default function UploadPage() {
           <input
             ref={inputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.png,.jpg,.jpeg,.webp"
             className="hidden"
             onChange={(e) => onFile(e.target.files?.[0])}
           />

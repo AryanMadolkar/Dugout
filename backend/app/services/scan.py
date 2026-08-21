@@ -159,19 +159,30 @@ def enrich_player(
     }
 
 
-SCAN_PROMPT = """Extract ONLY players visible in this Fantasy Premier League squad screenshot.
+SCAN_PROMPT = """Extract Fantasy Premier League squad data from this screenshot.
 Return strict JSON, no markdown:
 {
   "formation": "3-4-3",
   "starters": [{"name": "exact FPL web name as shown", "row": "GKP|DEF|MID|FWD", "is_captain": false, "is_vice": false, "confidence": 0.0-1.0}],
-  "bench": [{"name": "exact name", "row": "GKP|DEF|MID|FWD", "confidence": 0.0-1.0}]
+  "bench": [{"name": "exact name", "row": "GKP|DEF|MID|FWD", "confidence": 0.0-1.0}],
+  "chips": {
+    "playing": null,
+    "status": {
+      "Wildcard": "unknown",
+      "Free Hit": "unknown",
+      "Bench Boost": "unknown",
+      "Triple Captain": "unknown"
+    }
+  }
 }
 Rules:
-- Include ONLY players clearly shown in the screenshot (starting XI + bench, max 15).
-- Do NOT invent players not visible.
+- Include ONLY players clearly shown (starting XI + bench, max 15). Do NOT invent players.
 - Use FPL-style short names (e.g. Haaland, M.Salah, Gabriel).
 - Mark captain/vice if armband visible (C/V).
-- bench = substitute row below the pitch."""
+- bench = substitute row below the pitch.
+- chips.playing: if a chip is clearly active / played for this gameweek in the UI (banner, selected chip, "Triple Captain" active, etc.), set to exactly one of "Wildcard"|"Free Hit"|"Bench Boost"|"Triple Captain", else null. Only ONE chip can be active per GW.
+- chips.status: for each chip, "used" if greyed/spent/already played this season, "available" if clearly unused, otherwise "unknown". If chip info is not visible, leave all as "unknown" and playing as null.
+"""
 
 
 def _clean_json_text(content: str) -> str:
@@ -188,7 +199,27 @@ def _image_to_b64(image: Image.Image) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def _parse_vision_payload(content: str) -> tuple[list[RawDetected], str | None]:
+CHIP_NAMES = ("Wildcard", "Free Hit", "Bench Boost", "Triple Captain")
+
+
+def _normalize_chips(raw: Any) -> dict[str, Any]:
+    status = {name: "unknown" for name in CHIP_NAMES}
+    playing: str | None = None
+    if isinstance(raw, dict):
+        raw_status = raw.get("status") if isinstance(raw.get("status"), dict) else {}
+        for name in CHIP_NAMES:
+            val = str(raw_status.get(name) or "unknown").lower()
+            if val in ("used", "spent", "played"):
+                status[name] = "used"
+            elif val in ("available", "unused", "active"):
+                status[name] = "available"
+        play = raw.get("playing") or raw.get("active") or raw.get("active_this_gw")
+        if isinstance(play, str) and play in CHIP_NAMES:
+            playing = play
+    return {"playing": playing, "status": status}
+
+
+def _parse_vision_payload(content: str) -> tuple[list[RawDetected], str | None, dict[str, Any]]:
     text = _clean_json_text(content)
     data = json.loads(text)
     detected: list[RawDetected] = []
@@ -214,22 +245,28 @@ def _parse_vision_payload(content: str) -> tuple[list[RawDetected], str | None]:
                 confidence=float(item.get("confidence", 0.8)),
             )
         )
-    return detected, data.get("formation")
+    return detected, data.get("formation"), _normalize_chips(data.get("chips"))
 
 
 def _gemini_auth_attempts(api_key: str) -> list[tuple[dict[str, str], dict[str, str] | None]]:
+    """Auth for generativelanguage.googleapis.com generateContent.
+
+    AI Studio auth keys (AQ.*) and standard keys (AIza*) must use x-goog-api-key
+    or ?key= — Bearer is only for OAuth access tokens (ya29.*).
+    """
     bearer = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     api_key_header = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
     query_key = ({"Content-Type": "application/json"}, {"key": api_key})
 
-    # AQ.* tokens (e.g. from Google AI Studio / OAuth) use Bearer auth.
-    if api_key.startswith("AQ.") or api_key.startswith("ya29."):
-        return [(bearer, None), (api_key_header, None), query_key]
+    if api_key.startswith("ya29."):
+        return [(bearer, None)]
 
-    return [(api_key_header, None), (bearer, None), query_key]
+    return [(api_key_header, None), query_key]
 
 
-def _gemini_request(image: Image.Image, api_key: str, model: str) -> tuple[list[RawDetected], str | None]:
+def _gemini_request(
+    image: Image.Image, api_key: str, model: str
+) -> tuple[list[RawDetected], str | None, dict[str, Any]]:
     from app.services.http import http_post
 
     b64 = _image_to_b64(image)
@@ -279,9 +316,10 @@ GEMINI_VISION_MODELS = [
 ]
 
 
-def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | None]:
+def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | None, dict[str, Any]]:
+    empty_chips = _normalize_chips(None)
     if not settings.gemini_api_key:
-        return [], None
+        return [], None, empty_chips
 
     configured = settings.gemini_vision_model or GEMINI_VISION_MODELS[0]
     models = [configured, *GEMINI_VISION_MODELS]
@@ -368,6 +406,23 @@ def _detect_with_ocr(image: Image.Image) -> list[RawDetected]:
     return detected
 
 
+def _friendly_gemini_error(exc: Exception) -> str:
+    msg = str(exc).strip() or "unknown error"
+    lower = msg.lower()
+    if "403" in msg or "permission_denied" in lower or "denied access" in lower:
+        return (
+            "Gemini denied the request (403). On Vercel, set GEMINI_API_KEY to a new key from "
+            "https://aistudio.google.com/apikey (AQ. auth key). If the project shows denied/unavailable, "
+            "create a new AI Studio project or enable billing, then redeploy."
+        )
+    if "401" in msg or "unauthenticated" in lower or "invalid_api_key" in lower:
+        return (
+            "Gemini API key rejected (401). Update GEMINI_API_KEY in Vercel with a fresh key from "
+            "https://aistudio.google.com/apikey and redeploy."
+        )
+    return f"Gemini: {msg}"
+
+
 def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
     _ensure_players(db)
     players, _ = _player_index(db)
@@ -382,29 +437,20 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
     raw_detected: list[RawDetected] = []
     scan_method = "ocr"
     vision_errors: list[str] = []
+    chips: dict[str, Any] = _normalize_chips(None)
 
     if settings.gemini_api_key:
         try:
-            raw_detected, formation = _detect_with_gemini(image)
+            raw_detected, formation, chips = _detect_with_gemini(image)
             if raw_detected:
                 scan_method = "gemini"
             else:
                 vision_errors.append("Gemini returned no players.")
         except Exception as exc:
-            vision_errors.append(f"Gemini: {exc}")
-
-    if not raw_detected and settings.openai_api_key:
-        try:
-            raw_detected, formation = _detect_with_openai(image)
-            if raw_detected:
-                scan_method = "openai"
-            else:
-                vision_errors.append("OpenAI returned no players.")
-        except Exception as exc:
-            vision_errors.append(f"OpenAI: {exc}")
+            vision_errors.append(_friendly_gemini_error(exc))
 
     if not raw_detected:
-        if not settings.gemini_api_key and not settings.openai_api_key:
+        if not settings.gemini_api_key:
             raise RuntimeError(
                 "Vision scan is not configured. Add GEMINI_API_KEY in Vercel → Settings → Environment Variables."
             )
@@ -459,6 +505,12 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
     if len(bench) != 4:
         warnings.append(f"Detected {len(bench)} bench players (expected 4). Review on confirm screen.")
 
+    if chips.get("playing"):
+        warnings.append(f"Detected active chip this GW: {chips['playing']}.")
+    known = [f"{k}={v}" for k, v in (chips.get("status") or {}).items() if v != "unknown"]
+    if known:
+        warnings.append("Chip status from screenshot: " + ", ".join(known))
+
     return {
         "formation": formation or _infer_formation(starters),
         "starters": starters,
@@ -466,6 +518,7 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
         "unmatched": unmatched,
         "warnings": warnings,
         "scanMethod": scan_method,
+        "chips": chips,
     }
 
 

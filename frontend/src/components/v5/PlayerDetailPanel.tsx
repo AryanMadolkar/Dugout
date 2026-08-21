@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
 import { fetchPlayerHistory, type PlayerHistory } from "@/lib/api";
-import { estimatePlayerXp } from "@/lib/projections";
+import { estimatePlayerGwXp, estimatePlayerXp, resolveCaptainId } from "@/lib/projections";
 import { SectionHead } from "./ui/SectionHead";
 
 export function PlayerDetailPanel() {
-  const { selectedPlayer: player } = useDashboard();
+  const { selectedPlayer: player, starters, activeChip } = useDashboard();
   const [history, setHistory] = useState<PlayerHistory | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -48,7 +48,11 @@ export function PlayerDetailPanel() {
     );
   }
 
-  const xp = estimatePlayerXp(player);
+  const captainId = resolveCaptainId(starters);
+  const isCap = captainId === player.id;
+  const baseXp = estimatePlayerXp(player);
+  const xp = estimatePlayerGwXp(player, activeChip, captainId);
+  const mult = isCap ? (activeChip === "Triple Captain" ? 3 : 2) : 1;
   const formValue = history?.form ?? player.form ?? player.ppg ?? 0;
   const maxPts = Math.max(1, ...(history?.history.map((h) => h.total_points) ?? [1]));
 
@@ -70,16 +74,24 @@ export function PlayerDetailPanel() {
             {player.initials}
           </div>
           <div>
-            <p className="text-[20px] font-extrabold">{player.name}</p>
+            <p className="text-[20px] font-extrabold">
+              {player.name}
+              {isCap ? <span className="ml-2 text-[12px] font-bold text-[var(--coral)]">(C) ×{mult}</span> : null}
+            </p>
             <p className="font-label text-[11px] text-[var(--text-secondary)]">
               {player.club} · {player.position}
-              {player.isCaptain ? " · Captain" : player.isVice ? " · Vice" : ""}
+              {player.isVice && !isCap ? " · Vice" : ""}
             </p>
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatBox label="xP" value={xp.toFixed(1)} hero />
+          <StatBox
+            label="xP"
+            value={xp.toFixed(1)}
+            hero
+            hint={isCap ? `${baseXp.toFixed(1)} × ${mult}` : undefined}
+          />
           <StatBox label="Price" value={`£${player.price.toFixed(1)}m`} />
           <StatBox
             label="Form"

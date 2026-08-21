@@ -1,4 +1,4 @@
-import type { SquadPlayer } from "./dashboard-data";
+import type { ChipName, SquadPlayer } from "./dashboard-data";
 import type { Player } from "./types";
 import { estimatePlayerXp, estimateSquadXp } from "./projections";
 
@@ -52,14 +52,16 @@ export function computeTeamRating(
   starters: SquadPlayer[],
   bench: SquadPlayer[],
   liveById?: Map<number, Player>,
+  activeChip: ChipName | null = null,
 ): TeamRating | null {
   if (starters.length === 0) return null;
 
   const xi = starters.map((p) => withLive(p, liveById));
   const bn = bench.map((p) => withLive(p, liveById));
 
-  const projectedGw = estimateSquadXp(xi);
-  const xiScore = clamp((projectedGw / 65) * 100);
+  const projectedGw = estimateSquadXp(xi, bn, activeChip);
+  const benchmark = activeChip === "Bench Boost" ? 80 : activeChip === "Triple Captain" ? 72 : 65;
+  const xiScore = clamp((projectedGw / benchmark) * 100);
 
   const perfs = xi.map((p) => {
     if (p.form > 0) return { value: p.form, source: "form" as const };

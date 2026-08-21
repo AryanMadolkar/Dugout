@@ -65,6 +65,7 @@ export type AvailablePick = {
   next4Xp: number;
   rating: number;
   tag: PickTag;
+  reason?: string;
 };
 
 export type GwFixture = {

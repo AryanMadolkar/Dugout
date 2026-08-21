@@ -1,6 +1,6 @@
 import os
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     gemini_vision_model: str = "gemini-2.5-flash"
     openai_api_key: str = ""
     openai_vision_model: str = "gpt-4o-mini"
+
+    @field_validator("gemini_api_key", "openai_api_key", mode="before")
+    @classmethod
+    def strip_secrets(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().strip('"').strip("'")
+        return value
 
     @model_validator(mode="after")
     def apply_vercel_defaults(self) -> "Settings":

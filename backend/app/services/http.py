@@ -7,17 +7,23 @@ _CLIENT_KW = {"trust_env": False, "follow_redirects": True}
 
 
 def _api_error(response: httpx.Response) -> str:
+    status = response.status_code
     try:
         body = response.json()
         if isinstance(body, dict):
             err = body.get("error")
             if isinstance(err, dict):
-                return str(err.get("message") or err)
-            return str(body)
+                msg = str(err.get("message") or err.get("status") or err)
+                return f"HTTP {status}: {msg}" if msg else f"HTTP {status}"
+            if body.get("message"):
+                return f"HTTP {status}: {body['message']}"
+            return f"HTTP {status}: {body}"
     except Exception:
         pass
     text = response.text.strip()
-    return text[:400] if text else f"HTTP {response.status_code}"
+    if text:
+        return f"HTTP {status}: {text[:400]}"
+    return f"HTTP {status}"
 
 
 def http_get(url: str, *, headers: dict[str, str] | None = None, timeout: float = 30.0) -> httpx.Response:

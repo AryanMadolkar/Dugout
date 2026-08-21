@@ -114,6 +114,77 @@ class PlayerHistoryOut(BaseModel):
     history: list[PlayerHistoryGwOut]
 
 
+class SquadPlayerIn(BaseModel):
+    id: str | None = None
+    fplId: int | None = None
+    name: str
+    club: str | None = None
+    position: str | None = None
+    price: float | None = None
+    xp: float | None = None
+    form: float | None = None
+    ownership: float | None = None
+    isCaptain: bool = False
+    isVice: bool = False
+    slot: str | None = None
+
+
+class AiVerdictRequest(BaseModel):
+    squad: list[SquadPlayerIn]
+    activeChip: str | None = None
+
+
+class AiTransferOut(BaseModel):
+    out: str | None = None
+    in_: str | None = None
+    reason: str = ""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AiCaptainOut(BaseModel):
+    name: str
+    reason: str = ""
+
+
+class AiVerdictOut(BaseModel):
+    headline: str
+    summary: str
+    action: str
+    confidence: int = 50
+    transfers: list[dict] = []
+    captain: dict | None = None
+    risks: list[str] = []
+    source: str = "gemini"
+    gameweek: int | None = None
+
+
+class AiPicksRequest(BaseModel):
+    ownedIds: list[int] = []
+    position: str | None = None
+
+
+class AiPickOut(BaseModel):
+    id: int
+    name: str
+    club: str
+    position: str
+    price: float
+    form: float
+    ownership: float
+    next4Xp: float
+    rating: int
+    tag: str
+    reason: str = ""
+
+
+class AiPicksOut(BaseModel):
+    summary: str
+    picks: list[AiPickOut]
+    source: str = "gemini"
+    gameweek: int | None = None
+
+
 class ScanPlayerOut(BaseModel):
     id: str
     fpl_id: int
@@ -138,6 +209,11 @@ class ScanPlayerOut(BaseModel):
     nextFixtures: list[dict]
 
 
+class ScanChipsOut(BaseModel):
+    playing: str | None = None
+    status: dict[str, str] = {}
+
+
 class ScanResultOut(BaseModel):
     formation: str | None
     starters: list[ScanPlayerOut]
@@ -145,3 +221,4 @@ class ScanResultOut(BaseModel):
     unmatched: list[str]
     warnings: list[str]
     scanMethod: str
+    chips: ScanChipsOut | None = None

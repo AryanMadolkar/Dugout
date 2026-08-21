@@ -1,4 +1,4 @@
-import type { SquadPlayer } from "./dashboard-data";
+import type { ChipName, SquadPlayer } from "./dashboard-data";
 
 const POSITION_FLOOR: Record<SquadPlayer["position"], number> = {
   GKP: 3.4,
@@ -7,14 +7,18 @@ const POSITION_FLOOR: Record<SquadPlayer["position"], number> = {
   FWD: 5.0,
 };
 
+/** Chips selectable for this GW (only one at a time). */
+export const PLAYABLE_CHIPS: ChipName[] = ["Wildcard", "Free Hit", "Bench Boost", "Triple Captain"];
+
+/** Chips that change same-squad GW projected points. */
+export const PROJECTION_CHIPS: ChipName[] = ["Triple Captain", "Bench Boost"];
+
 function round1(n: number) {
   return Math.round(n * 10) / 10;
 }
 
 /**
- * Dugout GW expected points.
- * Blends FPL ep_next with form / PPG, then adjusts for fixture difficulty and premium price.
- * Early-season ep_next alone is often too low — we lift toward position baselines.
+ * Dugout GW expected points (single-player, before captain multiplier).
  */
 export function estimatePlayerXp(player: SquadPlayer): number {
   const ep = Number.isFinite(player.xp) ? player.xp : 0;
@@ -31,11 +35,9 @@ export function estimatePlayerXp(player: SquadPlayer): number {
   } else if (ppg > 0) {
     core = 0.4 * ep + 0.6 * ppg;
   } else {
-    // Official EP only (typical early season) — blend up toward a playable baseline
     core = ep * 1.1 + floor * 0.45;
   }
 
-  // Never sit far below the position floor when the player is a starter-quality price
   if (player.price >= 5.5) {
     core = Math.max(core, floor * 0.9);
   }
@@ -47,9 +49,56 @@ export function estimatePlayerXp(player: SquadPlayer): number {
   return round1(Math.min(18, Math.max(1.5, core + fixtureAdj + priceBonus + ownBonus)));
 }
 
-/** XI projected points with captain ×2 (vice not doubled). */
-export function estimateSquadXp(starters: SquadPlayer[]): number {
-  return round1(
-    starters.reduce((sum, p) => sum + estimatePlayerXp(p) * (p.isCaptain ? 2 : 1), 0),
-  );
+/** Captain ×2 by default; ×3 with Triple Captain. */
+export function captainMultiplier(activeChip: ChipName | null): number {
+  return activeChip === "Triple Captain" ? 3 : 2;
+}
+
+/** Who receives the captain multiplier (scan C, else highest xP starter). */
+export function resolveCaptainId(starters: SquadPlayer[]): string | null {
+  const marked = starters.find((p) => p.isCaptain);
+  if (marked) return marked.id;
+  if (starters.length === 0) return null;
+  return [...starters].sort((a, b) => estimatePlayerXp(b) - estimatePlayerXp(a))[0]?.id ?? null;
+}
+
+/** Effective GW xP for display — applies C×2 / TC×3 for the captain. */
+export function estimatePlayerGwXp(
+  player: SquadPlayer,
+  activeChip: ChipName | null = null,
+  captainId: string | null = player.isCaptain ? player.id : null,
+): number {
+  const base = estimatePlayerXp(player);
+  if (captainId && player.id === captainId) {
+    return round1(base * captainMultiplier(activeChip));
+  }
+  return base;
+}
+
+/**
+ * Squad projected points for the GW.
+ * - Captain always counts ×2 (or ×3 with Triple Captain)
+ * - Bench Boost adds full bench (no captain multiplier on bench)
+ */
+export function estimateSquadXp(
+  starters: SquadPlayer[],
+  bench: SquadPlayer[] = [],
+  activeChip: ChipName | null = null,
+): number {
+  const captainId = resolveCaptainId(starters);
+  let total = starters.reduce((sum, p) => sum + estimatePlayerGwXp(p, activeChip, captainId), 0);
+
+  if (activeChip === "Bench Boost") {
+    total += bench.reduce((sum, p) => sum + estimatePlayerXp(p), 0);
+  }
+
+  return round1(total);
+}
+
+export function projectionChipLabel(activeChip: ChipName | null): string {
+  if (activeChip === "Triple Captain") return "XI + captain ×3";
+  if (activeChip === "Bench Boost") return "XI + captain ×2 + bench";
+  if (activeChip === "Free Hit") return "XI + captain ×2 · Free Hit";
+  if (activeChip === "Wildcard") return "XI + captain ×2 · Wildcard";
+  return "XI + captain ×2";
 }

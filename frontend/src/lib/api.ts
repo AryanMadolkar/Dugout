@@ -73,6 +73,37 @@ export function fetchPlayerHistory(playerId: number) {
   return getJson<PlayerHistory>(`/api/players/${playerId}/history`);
 }
 
+export type AiVerdict = {
+  headline: string;
+  summary: string;
+  action: string;
+  confidence: number;
+  transfers: { out?: string | null; in?: string | null; reason?: string }[];
+  captain: { name: string; reason?: string } | null;
+  risks: string[];
+  source: string;
+  gameweek: number | null;
+};
+
+export async function fetchAiVerdict(squad: unknown[], activeChip: string | null): Promise<AiVerdict> {
+  const response = await fetch(`${getApiUrl()}/api/ai/verdict`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ squad, activeChip }),
+  });
+  if (!response.ok) {
+    let detail = `Gemini verdict failed (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<AiVerdict>;
+}
+
 export async function triggerIngest(): Promise<IngestResult> {
   const response = await fetch(`${getApiUrl()}/api/ingest`, { method: "POST" });
   if (!response.ok) {
@@ -82,6 +113,11 @@ export async function triggerIngest(): Promise<IngestResult> {
   return response.json() as Promise<IngestResult>;
 }
 
+export type ScanChips = {
+  playing: string | null;
+  status: Record<string, string>;
+};
+
 export type ScanApiResult = {
   formation: string | null;
   starters: SquadPlayer[];
@@ -89,6 +125,7 @@ export type ScanApiResult = {
   unmatched: string[];
   warnings: string[];
   scanMethod: string;
+  chips?: ScanChips | null;
 };
 
 function mapScanPlayer(raw: Record<string, unknown>): SquadPlayer {
@@ -143,6 +180,7 @@ export async function scanSquadImage(file: File): Promise<ScanApiResult> {
     unmatched: string[];
     warnings: string[];
     scanMethod: string;
+    chips?: ScanChips | null;
   };
   return {
     formation: data.formation,
@@ -151,10 +189,13 @@ export async function scanSquadImage(file: File): Promise<ScanApiResult> {
     unmatched: data.unmatched,
     warnings: data.warnings,
     scanMethod: data.scanMethod,
+    chips: data.chips ?? null,
   };
 }
 
-export function scanResultToPending(result: ScanApiResult): SavedSquad & { unmatched: string[]; scanMethod: string } {
+export function scanResultToPending(
+  result: ScanApiResult,
+): SavedSquad & { unmatched: string[]; scanMethod: string; chips?: ScanChips | null } {
   return {
     formation: result.formation,
     starters: result.starters,
@@ -163,5 +204,6 @@ export function scanResultToPending(result: ScanApiResult): SavedSquad & { unmat
     warnings: result.warnings,
     unmatched: result.unmatched,
     scanMethod: result.scanMethod,
+    chips: result.chips ?? null,
   };
 }

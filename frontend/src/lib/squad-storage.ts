@@ -1,14 +1,19 @@
-import type { ChipUsageMap, SavedSquad, SquadPlayer } from "./dashboard-data";
-import { DEFAULT_CHIP_USAGE } from "./dashboard-data";
+import type { ChipName, ChipUsageMap, SavedSquad, SquadPlayer } from "./dashboard-data";
+import { CHIP_NAMES, DEFAULT_CHIP_USAGE } from "./dashboard-data";
 import { estimateSquadXp } from "./projections";
 
 const SQUAD_KEY = "fpl-scanned-squad";
 const PENDING_KEY = "fpl-pending-scan";
 const CHIPS_KEY = "fpl-chip-usage";
+const ACTIVE_CHIP_KEY = "fpl-active-chip";
 
 export type PendingScan = SavedSquad & {
   unmatched: string[];
   scanMethod?: string;
+  chips?: {
+    playing: string | null;
+    status: Record<string, string>;
+  } | null;
 };
 
 export function loadSquad(): SavedSquad | null {
@@ -66,8 +71,35 @@ export function clearChipUsage() {
   sessionStorage.removeItem(CHIPS_KEY);
 }
 
-export function projectedPoints(starters: SquadPlayer[]): number {
-  return estimateSquadXp(starters);
+export function loadActiveChip(): ChipName | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_CHIP_KEY);
+    if (raw && (CHIP_NAMES as readonly string[]).includes(raw)) return raw as ChipName;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveChip(chip: ChipName | null) {
+  if (!chip) {
+    sessionStorage.removeItem(ACTIVE_CHIP_KEY);
+    return;
+  }
+  sessionStorage.setItem(ACTIVE_CHIP_KEY, chip);
+}
+
+export function clearActiveChip() {
+  sessionStorage.removeItem(ACTIVE_CHIP_KEY);
+}
+
+export function projectedPoints(
+  starters: SquadPlayer[],
+  bench: SquadPlayer[] = [],
+  activeChip: ChipName | null = null,
+): number {
+  return estimateSquadXp(starters, bench, activeChip);
 }
 
 export function formatScanTime(iso: string): string {

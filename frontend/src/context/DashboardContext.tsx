@@ -6,12 +6,15 @@ import { DEFAULT_CHIP_USAGE } from "@/lib/dashboard-data";
 import { fetchPlayers } from "@/lib/api";
 import type { Player } from "@/lib/types";
 import {
+  clearActiveChip,
   clearChipUsage,
   clearPendingScan,
   clearSquad,
+  loadActiveChip,
   loadChipUsage,
   loadPendingScan,
   loadSquad,
+  saveActiveChip,
   saveChipUsage,
   savePendingScan,
   saveSquad,
@@ -51,6 +54,8 @@ type DashboardContextValue = {
   bench: SquadPlayer[];
   chipUsage: ChipUsageMap;
   setChipAvailability: (name: ChipName, status: ChipAvailability) => void;
+  activeChip: ChipName | null;
+  setActiveChip: (chip: ChipName | null) => void;
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
   selectedPlayer: SquadPlayer | null;
@@ -70,6 +75,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [squad, setSquad] = useState<SavedSquad | null>(null);
   const [pendingScan, setPendingScanState] = useState<PendingScan | null>(null);
   const [chipUsage, setChipUsage] = useState<ChipUsageMap>(DEFAULT_CHIP_USAGE);
+  const [activeChip, setActiveChipState] = useState<ChipName | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<Modal>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -78,6 +84,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     setSquad(loadSquad());
     setPendingScanState(loadPendingScan());
     setChipUsage(loadChipUsage());
+    setActiveChipState(loadActiveChip());
     setHydrated(true);
   }, []);
 
@@ -149,6 +156,25 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     setSquad(confirmed);
     setPendingScanState(null);
     setSelectedId(confirmed.starters[0]?.id ?? null);
+
+    // Apply chip info detected from the screenshot (one active chip per GW).
+    const detected = pendingScan.chips;
+    if (detected?.status) {
+      setChipUsage((prev) => {
+        const next = { ...prev };
+        for (const name of Object.keys(DEFAULT_CHIP_USAGE) as ChipName[]) {
+          const val = detected.status[name];
+          if (val === "used" || val === "available") next[name] = val;
+        }
+        saveChipUsage(next);
+        return next;
+      });
+    }
+    const playing = detected?.playing;
+    if (playing === "Wildcard" || playing === "Free Hit" || playing === "Bench Boost" || playing === "Triple Captain") {
+      saveActiveChip(playing);
+      setActiveChipState(playing);
+    }
   }, [pendingScan]);
 
   const setChipAvailability = useCallback((name: ChipName, status: ChipAvailability) => {
@@ -157,15 +183,34 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       saveChipUsage(next);
       return next;
     });
+    if (status === "used") {
+      setActiveChipState((current) => {
+        if (current !== name) return current;
+        saveActiveChip(null);
+        return null;
+      });
+    }
+  }, []);
+
+  const setActiveChip = useCallback((chip: ChipName | null) => {
+    // Exclusive: only one chip can be played per GW.
+    const next =
+      chip === "Wildcard" || chip === "Free Hit" || chip === "Bench Boost" || chip === "Triple Captain"
+        ? chip
+        : null;
+    saveActiveChip(next);
+    setActiveChipState(next);
   }, []);
 
   const clearScannedSquad = useCallback(() => {
     clearSquad();
     clearPendingScan();
     clearChipUsage();
+    clearActiveChip();
     setSquad(null);
     setPendingScanState(null);
     setChipUsage({ ...DEFAULT_CHIP_USAGE });
+    setActiveChipState(null);
     setSelectedId(null);
   }, []);
 
@@ -179,6 +224,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       bench,
       chipUsage,
       setChipAvailability,
+      activeChip,
+      setActiveChip,
       selectedId,
       setSelectedId,
       selectedPlayer,
@@ -199,6 +246,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       bench,
       chipUsage,
       setChipAvailability,
+      activeChip,
+      setActiveChip,
       selectedId,
       selectedPlayer,
       allPlayers,

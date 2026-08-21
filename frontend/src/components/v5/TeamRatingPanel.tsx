@@ -8,7 +8,7 @@ import type { Player } from "@/lib/types";
 import { SectionHead } from "./ui/SectionHead";
 
 export function TeamRatingPanel() {
-  const { starters, bench, hasSquad } = useDashboard();
+  const { starters, bench, hasSquad, activeChip } = useDashboard();
   const [liveById, setLiveById] = useState<Map<number, Player> | null>(null);
 
   useEffect(() => {
@@ -28,8 +28,8 @@ export function TeamRatingPanel() {
   }, [hasSquad, starters, bench]);
 
   const rating = useMemo(
-    () => computeTeamRating(starters, bench, liveById ?? undefined),
-    [starters, bench, liveById],
+    () => computeTeamRating(starters, bench, liveById ?? undefined, activeChip),
+    [starters, bench, liveById, activeChip],
   );
 
   if (!hasSquad || !rating) {
