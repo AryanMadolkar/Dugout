@@ -77,6 +77,25 @@ def fetch_entry_summary(entry_id: int, current_gw: int | None = None) -> dict[st
     }
 
 
+def fetch_entry_leagues(entry_id: int) -> dict[str, Any]:
+    """Classic mini-leagues the manager has joined."""
+    client = FPLClient()
+    entry = client.entry(entry_id)
+    classic = (entry.get("leagues") or {}).get("classic") or []
+    leagues = [
+        {
+            "id": int(lg.get("id") or 0),
+            "name": lg.get("name") or "League",
+            "shortName": lg.get("short_name"),
+            "rank": int(lg.get("rank") or 0) or None,
+            "totalManagers": int(lg.get("rank_count") or 0) or None,
+        }
+        for lg in classic
+        if lg.get("id")
+    ]
+    return {"entryId": entry_id, "leagues": leagues}
+
+
 def fetch_league_analysis(entry_id: int, league_id: int | None = None) -> dict[str, Any]:
     client = FPLClient()
     entry = client.entry(entry_id)

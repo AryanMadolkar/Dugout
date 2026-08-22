@@ -282,6 +282,23 @@ export function fetchEntrySummary(entryId: number) {
   return getJson<EntrySummary>(`/api/fpl/entry/${entryId}`);
 }
 
+export type FplLeagueOption = {
+  id: number;
+  name: string;
+  shortName: string | null;
+  rank: number | null;
+  totalManagers: number | null;
+};
+
+export type EntryLeagues = {
+  entryId: number;
+  leagues: FplLeagueOption[];
+};
+
+export function fetchEntryLeagues(entryId: number) {
+  return getJson<EntryLeagues>(`/api/fpl/entry/${entryId}/leagues`);
+}
+
 export type LeagueAnalysis = {
   yourRank: number | null;
   yourLeagueRank: number | null;

@@ -186,6 +186,19 @@ class EntrySummaryOut(BaseModel):
     defaultLeagueName: str | None = None
 
 
+class LeagueOptionOut(BaseModel):
+    id: int
+    name: str
+    shortName: str | None = None
+    rank: int | None = None
+    totalManagers: int | None = None
+
+
+class EntryLeaguesOut(BaseModel):
+    entryId: int
+    leagues: list[LeagueOptionOut] = []
+
+
 class LeagueAnalysisOut(BaseModel):
     yourRank: int | None = None
     yourLeagueRank: int | None = None

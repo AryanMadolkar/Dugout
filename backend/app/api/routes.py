@@ -13,6 +13,7 @@ from app.api.schemas import (
     AiVerdictOut,
     AiVerdictRequest,
     EntrySummaryOut,
+    EntryLeaguesOut,
     FixtureOut,
     GameweekOut,
     GwReviewOut,
@@ -38,6 +39,7 @@ from app.services.fpl_client import FPLClient
 from app.services.fpl_entry import (
     build_gw_review,
     build_multi_gw_transfer_plan,
+    fetch_entry_leagues,
     fetch_entry_summary,
     fetch_league_analysis,
 )
@@ -305,6 +307,15 @@ def fpl_entry(entry_id: int, db: Session = Depends(get_db)) -> EntrySummaryOut:
         return EntrySummaryOut(**result)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Could not load FPL entry: {exc}") from exc
+
+
+@router.get("/fpl/entry/{entry_id}/leagues", response_model=EntryLeaguesOut)
+def fpl_entry_leagues(entry_id: int) -> EntryLeaguesOut:
+    try:
+        result = fetch_entry_leagues(entry_id)
+        return EntryLeaguesOut(**result)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not load leagues: {exc}") from exc
 
 
 @router.get("/fpl/entry/{entry_id}/league", response_model=LeagueAnalysisOut)

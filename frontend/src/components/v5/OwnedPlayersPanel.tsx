@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
+import { PlayerStatsModal } from "@/components/v5/PlayerStatsModal";
 import type { SquadPlayer } from "@/lib/dashboard-data";
 import { estimatePlayerXp } from "@/lib/projections";
 
@@ -25,10 +25,12 @@ function playerRating(p: SquadPlayer) {
 }
 
 export function OwnedPlayersPanel() {
-  const router = useRouter();
-  const { allPlayers, hasSquad, setSelectedId } = useDashboard();
+  const { allPlayers, hasSquad } = useDashboard();
   const [position, setPosition] = useState<(typeof POSITIONS)[number]>("All");
   const [sort, setSort] = useState<(typeof SORTS)[number]>("xPts");
+  const [viewPlayer, setViewPlayer] = useState<SquadPlayer | null>(null);
+
+  const openPlayer = (player: SquadPlayer) => setViewPlayer(player);
 
   const rows = useMemo(() => {
     const pos = POSITION_MAP[position];
@@ -66,6 +68,7 @@ export function OwnedPlayersPanel() {
   }
 
   return (
+    <>
     <section className="panel-elevated overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--navy)] px-4 py-3">
         <h2 className="font-label text-[12px] font-bold text-white">Your owned players</h2>
@@ -127,10 +130,7 @@ export function OwnedPlayersPanel() {
                 <tr
                   key={player.id}
                   className="cursor-pointer border-b border-[var(--border)] transition hover:bg-[var(--canvas)]"
-                  onClick={() => {
-                    setSelectedId(player.id);
-                    router.push("/");
-                  }}
+                  onClick={() => openPlayer(player)}
                 >
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
@@ -184,8 +184,7 @@ export function OwnedPlayersPanel() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelectedId(player.id);
-                        router.push("/");
+                        openPlayer(player);
                       }}
                       className="control border border-[var(--border)] px-2 py-1 text-[11px] font-semibold hover:bg-[var(--canvas)]"
                     >
@@ -199,5 +198,11 @@ export function OwnedPlayersPanel() {
         </table>
       </div>
     </section>
+    <PlayerStatsModal
+      player={viewPlayer}
+      open={viewPlayer != null}
+      onClose={() => setViewPlayer(null)}
+    />
+    </>
   );
 }
