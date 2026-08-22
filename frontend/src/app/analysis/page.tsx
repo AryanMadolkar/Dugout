@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { AppLayout } from "@/components/v5/AppLayout";
+import { AskDugoutPanel } from "@/components/v5/AskDugoutPanel";
 import { ComparisonPanel } from "@/components/v5/ComparisonPanel";
+import { DecisionHistoryPanel } from "@/components/v5/DecisionHistoryPanel";
+import { GwReviewPanel } from "@/components/v5/GwReviewPanel";
+import { MiniLeaguePanel } from "@/components/v5/MiniLeaguePanel";
 import { PlayerDetailPanel } from "@/components/v5/PlayerDetailPanel";
+import { RankStrategyPanel } from "@/components/v5/RankStrategyPanel";
 import { TeamHeader } from "@/components/v5/TeamHeader";
 import { TeamRatingPanel } from "@/components/v5/TeamRatingPanel";
+import { WhatIfPanel } from "@/components/v5/WhatIfPanel";
 import { useDashboard } from "@/context/DashboardContext";
 import { projectedPoints } from "@/lib/squad-storage";
 
@@ -39,6 +45,17 @@ export default function AnalysisPage() {
         <TeamRatingPanel />
         <PlayerDetailPanel />
       </div>
+      <RankStrategyPanel />
+      <GwReviewPanel />
+      <MiniLeaguePanel />
+      <DecisionHistoryPanel />
+      <section className="panel-elevated overflow-hidden p-4">
+        <h2 className="font-label text-[12px] font-bold">What if? simulator</h2>
+        <div className="mt-3">
+          <WhatIfPanel />
+        </div>
+      </section>
+      <AskDugoutPanel />
       <ComparisonPanel />
     </AppLayout>
   );

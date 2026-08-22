@@ -52,7 +52,7 @@ function inferFormation(squad: SquadPlayer[]): string {
 }
 
 export function PitchView({ squad }: Props) {
-  const { selectedId, setSelectedId, optimiseXi } = useDashboard();
+  const { selectedId, setSelectedId, optimiseXi, openModal } = useDashboard();
   const [note, setNote] = useState<string | null>(null);
   const byRow = ROWS.map((row) => ({
     row,
@@ -84,6 +84,13 @@ export function PitchView({ squad }: Props) {
         title={`Starting XI · ${inferFormation(squad)}`}
         right={
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openModal("whatIf")}
+              className="control rounded-[3px] border border-[var(--border)] bg-white px-2.5 py-1 text-[10px] font-bold text-[var(--navy)] hover:bg-[var(--canvas)]"
+            >
+              What if?
+            </button>
             <button
               type="button"
               onClick={onOptimise}

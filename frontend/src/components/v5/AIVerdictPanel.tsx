@@ -73,7 +73,7 @@ export function AIVerdictPanel() {
 
   return (
     <section className="panel-elevated overflow-hidden">
-      <SectionHead title="AI Verdict · Gemini" />
+      <SectionHead title="Full analysis" />
       <div className="p-4">
         {loading ? (
           <p className="text-[13px] text-[var(--text-secondary)]">Gemini is analysing your squad…</p>
@@ -118,8 +118,7 @@ export function AIVerdictPanel() {
               <p className="mt-3 text-[11px] text-[var(--text-secondary)]">Risks: {verdict.risks.join(" · ")}</p>
             ) : null}
             <p className="mt-3 font-label text-[10px] text-[var(--text-secondary)]">
-              {verdict.source === "heuristic" ? "Dugout heuristic (Gemini blocked)" : "Powered by Gemini"}
-              {" · "}confidence {verdict.confidence}%
+              Dugout analysis · confidence {verdict.confidence}%
               {verdict.gameweek ? ` · GW${verdict.gameweek}` : ""}
             </p>
           </>

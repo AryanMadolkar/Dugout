@@ -1,6 +1,8 @@
 import type { ChipName, SquadPlayer } from "./dashboard-data";
 import type { Player } from "./types";
 import { estimatePlayerXp, estimateSquadXp } from "./projections";
+import { optimisePickScore } from "./optimise-xi";
+import { startProbability } from "./player-intelligence";
 
 export type RatingBar = {
   label: string;
@@ -14,6 +16,7 @@ export type TeamRating = {
   verdictTone: "good" | "ok" | "warn";
   bars: RatingBar[];
   projectedGw: number;
+  weakness: string;
 };
 
 function clamp(n: number, lo = 0, hi = 100) {
@@ -41,12 +44,23 @@ function fdrOf(player: SquadPlayer) {
   return player.nextFixtures[0]?.fdr ?? 3;
 }
 
+function weakestLabel(bars: RatingBar[]): string {
+  const sorted = [...bars].sort((a, b) => a.value - b.value);
+  const w = sorted[0];
+  if (!w) return "Squad balance";
+  const map: Record<string, string> = {
+    "Starting XI": "starting XI quality",
+    Fixtures: "fixture difficulty",
+    Form: "recent form",
+    Value: "price efficiency",
+    Depth: "squad depth",
+    Rotation: "rotation risk",
+  };
+  return `Your biggest weakness is ${map[w.label] ?? w.label.toLowerCase()}.`;
+}
+
 /**
- * Team rating from FPL metrics, each bar 0–100:
- * - Expected pts: Dugout GW projection (XI + captain) vs ~65 (strong week)
- * - Form: avg form / PPG / projected xP
- * - Fixtures: inverted FDR (1 easy → 100, 5 hard → 0)
- * - Depth: bench combined xPts vs ~18
+ * Dugout Score — 0–100 with six fantasy-game dimensions.
  */
 export function computeTeamRating(
   starters: SquadPlayer[],
@@ -61,38 +75,61 @@ export function computeTeamRating(
 
   const projectedGw = estimateSquadXp(xi, bn, activeChip);
   const benchmark = activeChip === "Bench Boost" ? 80 : activeChip === "Triple Captain" ? 72 : 65;
-  const xiScore = clamp((projectedGw / benchmark) * 100);
-
-  const perfs = xi.map((p) => {
-    if (p.form > 0) return { value: p.form, source: "form" as const };
-    if ((p.ppg ?? 0) > 0) return { value: p.ppg as number, source: "ppg" as const };
-    return { value: estimatePlayerXp(p), source: "xp" as const };
-  });
-  const avgPerf = perfs.reduce((s, p) => s + p.value, 0) / perfs.length;
-  const usingForm = perfs.some((p) => p.source === "form");
-  const formScore = clamp((avgPerf / (usingForm ? 6 : 5.5)) * 100);
-  const formHint = usingForm ? `Avg form ${avgPerf.toFixed(1)}` : `Avg xPts ${avgPerf.toFixed(1)}`;
+  const startingXi = clamp((projectedGw / benchmark) * 100);
 
   const avgFdr = xi.reduce((s, p) => s + fdrOf(p), 0) / xi.length;
-  const fixtureScore = clamp(((5 - avgFdr) / 4) * 100);
+  const fixtures = clamp(((5 - avgFdr) / 4) * 100);
+
+  const perfs = xi.map((p) => {
+    if (p.form > 0) return p.form;
+    if ((p.ppg ?? 0) > 0) return p.ppg as number;
+    return estimatePlayerXp(p);
+  });
+  const avgPerf = perfs.reduce((s, v) => s + v, 0) / perfs.length;
+  const form = clamp((avgPerf / 6) * 100);
+
+  const valueScores = xi.map((p) => estimatePlayerXp(p) / Math.max(p.price, 4));
+  const value = clamp((valueScores.reduce((s, v) => s + v, 0) / valueScores.length / 1.4) * 100);
 
   const benchXp = bn.reduce((s, p) => s + estimatePlayerXp(p), 0);
-  const depthScore = clamp((benchXp / 18) * 100);
+  const depth = clamp((benchXp / 18) * 100);
 
-  const score = clamp(0.4 * xiScore + 0.25 * formScore + 0.2 * fixtureScore + 0.15 * depthScore);
+  const rotScores = xi.map((p) => startProbability(p, liveFor(p, liveById)));
+  const rotation = clamp(rotScores.reduce((s, v) => s + v, 0) / rotScores.length);
+
+  const pickAvg = xi.reduce((s, p) => s + optimisePickScore(p), 0) / xi.length;
+  const startingXiBlend = clamp(0.6 * startingXi + 0.4 * (pickAvg / 8) * 100);
+
+  const bars: RatingBar[] = [
+    { label: "Starting XI", value: startingXiBlend, hint: `${projectedGw.toFixed(1)} GW xPts` },
+    { label: "Fixtures", value: fixtures, hint: `Avg FDR ${avgFdr.toFixed(1)}` },
+    { label: "Form", value: form, hint: `Avg ${avgPerf.toFixed(1)}` },
+    { label: "Value", value: value, hint: "xP per £m" },
+    { label: "Depth", value: depth, hint: `${benchXp.toFixed(1)} bench xPts` },
+    { label: "Rotation", value: rotation, hint: `${Math.round(rotation)}% avg start prob` },
+  ];
+
+  const score = clamp(
+    0.28 * startingXiBlend +
+      0.2 * fixtures +
+      0.18 * form +
+      0.14 * value +
+      0.1 * depth +
+      0.1 * rotation,
+  );
 
   let verdict: string;
   let verdictTone: TeamRating["verdictTone"];
-  if (score >= 80) {
+  if (score >= 85) {
     verdict = "Elite";
     verdictTone = "good";
-  } else if (score >= 70) {
-    verdict = "Strong";
+  } else if (score >= 75) {
+    verdict = "Good";
     verdictTone = "good";
-  } else if (score >= 55) {
+  } else if (score >= 62) {
     verdict = "Solid";
     verdictTone = "ok";
-  } else if (score >= 40) {
+  } else if (score >= 48) {
     verdict = "Average";
     verdictTone = "ok";
   } else {
@@ -105,11 +142,7 @@ export function computeTeamRating(
     verdict,
     verdictTone,
     projectedGw,
-    bars: [
-      { label: "Expected pts", value: xiScore, hint: `${projectedGw.toFixed(1)} GW xPts` },
-      { label: "Form", value: formScore, hint: formHint },
-      { label: "Fixtures", value: fixtureScore, hint: `Avg FDR ${avgFdr.toFixed(1)}` },
-      { label: "Depth", value: depthScore, hint: `${benchXp.toFixed(1)} bench xPts` },
-    ],
+    bars,
+    weakness: weakestLabel(bars),
   };
 }

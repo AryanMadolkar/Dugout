@@ -5,6 +5,8 @@ import { AppLayout } from "@/components/v5/AppLayout";
 import { ComparisonPanel } from "@/components/v5/ComparisonPanel";
 import { TeamHeader } from "@/components/v5/TeamHeader";
 import { TransferAdvicePanel } from "@/components/v5/TransferAdvicePanel";
+import { TransferPlannerPanel } from "@/components/v5/TransferPlannerPanel";
+import { WhatIfPanel } from "@/components/v5/WhatIfPanel";
 import { useDashboard } from "@/context/DashboardContext";
 
 export default function TransfersPage() {
@@ -25,7 +27,14 @@ export default function TransfersPage() {
 
   return (
     <AppLayout teamHeader={<TeamHeader />}>
+      <TransferPlannerPanel />
       <TransferAdvicePanel />
+      <section className="panel-elevated overflow-hidden p-4">
+        <h2 className="font-label text-[12px] font-bold text-[var(--text-primary)]">What if?</h2>
+        <div className="mt-3">
+          <WhatIfPanel />
+        </div>
+      </section>
       <ComparisonPanel />
     </AppLayout>
   );

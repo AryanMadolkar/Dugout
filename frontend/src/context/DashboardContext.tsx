@@ -11,17 +11,26 @@ import {
   clearPendingScan,
   clearSquad,
   loadActiveChip,
+  loadBank,
   loadChipUsage,
+  loadFplRank,
+  loadFreeTransfers,
   loadPendingScan,
   loadSquad,
+  loadStrategyMode,
   saveActiveChip,
+  saveBank,
   saveChipUsage,
+  saveFplRank,
+  saveFreeTransfers,
   savePendingScan,
   saveSquad,
+  saveStrategyMode,
   type PendingScan,
 } from "@/lib/squad-storage";
 import { normalizeChip } from "@/lib/projections";
 import { optimiseStartingXi, type OptimiseXiResult } from "@/lib/optimise-xi";
+import type { StrategyMode } from "@/lib/strategy-mode";
 
 type Modal = "whatIf" | "makeMove" | "fixPlayer" | null;
 
@@ -71,6 +80,15 @@ type DashboardContextValue = {
   confirmPendingScan: () => void;
   /** Re-pick best valid XI from the 15 by Dugout xP. */
   optimiseXi: () => OptimiseXiResult | null;
+  strategyMode: StrategyMode;
+  setStrategyMode: (mode: StrategyMode) => void;
+  bank: number;
+  setBank: (bank: number) => void;
+  freeTransfers: number;
+  setFreeTransfers: (ft: number) => void;
+  fplRank: number | null;
+  setFplRank: (rank: number | null) => void;
+  setCaptain: (playerId: string) => void;
   clearScannedSquad: () => void;
 };
 
@@ -84,12 +102,20 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<Modal>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [strategyMode, setStrategyModeState] = useState<StrategyMode>("BALANCED");
+  const [bank, setBankState] = useState(0.5);
+  const [freeTransfers, setFreeTransfersState] = useState(1);
+  const [fplRank, setFplRankState] = useState<number | null>(null);
 
   useEffect(() => {
     setSquad(loadSquad());
     setPendingScanState(loadPendingScan());
     setChipUsage(loadChipUsage());
     setActiveChipState(loadActiveChip());
+    setStrategyModeState(loadStrategyMode());
+    setBankState(loadBank());
+    setFreeTransfersState(loadFreeTransfers());
+    setFplRankState(loadFplRank());
     setHydrated(true);
   }, []);
 
@@ -218,6 +244,50 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     setActiveChipState(next);
   }, []);
 
+  const setStrategyMode = useCallback((mode: StrategyMode) => {
+    saveStrategyMode(mode);
+    setStrategyModeState(mode);
+  }, []);
+
+  const setBank = useCallback((next: number) => {
+    saveBank(next);
+    setBankState(next);
+  }, []);
+
+  const setFreeTransfers = useCallback((ft: number) => {
+    saveFreeTransfers(ft);
+    setFreeTransfersState(ft);
+  }, []);
+
+  const setFplRank = useCallback((rank: number | null) => {
+    saveFplRank(rank);
+    setFplRankState(rank);
+  }, []);
+
+  const setCaptain = useCallback(
+    (playerId: string) => {
+      if (!squad) return;
+      const next: SavedSquad = {
+        ...squad,
+        starters: squad.starters.map((p) => ({
+          ...p,
+          isCaptain: p.id === playerId,
+          isVice: false,
+        })),
+      };
+      const vice = [...next.starters].sort((a, b) => b.xp - a.xp).find((p) => p.id !== playerId);
+      if (vice) {
+        next.starters = next.starters.map((p) => ({
+          ...p,
+          isVice: p.id === vice.id,
+        }));
+      }
+      saveSquad(next);
+      setSquad(next);
+    },
+    [squad],
+  );
+
   const optimiseXi = useCallback((): OptimiseXiResult | null => {
     if (!squad) return null;
     const result = optimiseStartingXi(squad, activeChip);
@@ -269,6 +339,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       updatePendingScan,
       confirmPendingScan,
       optimiseXi,
+      strategyMode,
+      setStrategyMode,
+      bank,
+      setBank,
+      freeTransfers,
+      setFreeTransfers,
+      fplRank,
+      setFplRank,
+      setCaptain,
       clearScannedSquad,
     }),
     [
@@ -292,6 +371,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       updatePendingScan,
       confirmPendingScan,
       optimiseXi,
+      strategyMode,
+      setStrategyMode,
+      bank,
+      freeTransfers,
+      fplRank,
+      setBank,
+      setFreeTransfers,
+      setFplRank,
+      setCaptain,
       clearScannedSquad,
     ],
   );

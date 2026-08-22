@@ -6,6 +6,10 @@ const SQUAD_KEY = "fpl-scanned-squad";
 const PENDING_KEY = "fpl-pending-scan";
 const CHIPS_KEY = "fpl-chip-usage";
 const ACTIVE_CHIP_KEY = "fpl-active-chip";
+const STRATEGY_KEY = "dugout-strategy";
+const BANK_KEY = "dugout-bank";
+const FT_KEY = "dugout-free-transfers";
+const RANK_KEY = "dugout-rank";
 
 export type PendingScan = SavedSquad & {
   unmatched: string[];
@@ -106,6 +110,71 @@ export function projectedPoints(
   activeChip: ChipName | null = null,
 ): number {
   return estimateSquadXp(starters, bench, activeChip);
+}
+
+import type { StrategyMode } from "./strategy-mode";
+
+export function loadStrategyMode(): StrategyMode {
+  if (typeof window === "undefined") return "BALANCED";
+  try {
+    const raw = sessionStorage.getItem(STRATEGY_KEY);
+    if (raw === "SAFE" || raw === "AGGRESSIVE" || raw === "BALANCED") return raw;
+    return "BALANCED";
+  } catch {
+    return "BALANCED";
+  }
+}
+
+export function saveStrategyMode(mode: StrategyMode) {
+  sessionStorage.setItem(STRATEGY_KEY, mode);
+}
+
+export function loadBank(): number {
+  if (typeof window === "undefined") return 0.5;
+  try {
+    const raw = sessionStorage.getItem(BANK_KEY);
+    return raw ? Number(raw) : 0.5;
+  } catch {
+    return 0.5;
+  }
+}
+
+export function saveBank(bank: number) {
+  sessionStorage.setItem(BANK_KEY, String(bank));
+}
+
+export function loadFreeTransfers(): number {
+  if (typeof window === "undefined") return 1;
+  try {
+    const raw = sessionStorage.getItem(FT_KEY);
+    return raw ? Number(raw) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+export function saveFreeTransfers(ft: number) {
+  sessionStorage.setItem(FT_KEY, String(ft));
+}
+
+export function loadFplRank(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(RANK_KEY);
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveFplRank(rank: number | null) {
+  if (rank == null) {
+    sessionStorage.removeItem(RANK_KEY);
+    return;
+  }
+  sessionStorage.setItem(RANK_KEY, String(rank));
 }
 
 export function formatScanTime(iso: string): string {

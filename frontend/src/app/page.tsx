@@ -5,10 +5,12 @@ import { AppLayout } from "@/components/v5/AppLayout";
 import { BenchStrip } from "@/components/v5/BenchStrip";
 import { ComparisonPanel } from "@/components/v5/ComparisonPanel";
 import { FixtureWatchPanel } from "@/components/v5/FixtureWatchPanel";
+import { GameweekReadyPanel } from "@/components/v5/GameweekReadyPanel";
 import { PitchView } from "@/components/v5/PitchView";
 import { PlayerDetailPanel } from "@/components/v5/PlayerDetailPanel";
+import { StrategyModeBar } from "@/components/v5/StrategyModeBar";
 import { TeamHeader } from "@/components/v5/TeamHeader";
-import { AIVerdictPanel } from "@/components/v5/AIVerdictPanel";
+import { WeeklyVerdictPanel } from "@/components/v5/WeeklyVerdictPanel";
 import { CaptainPanel } from "@/components/v5/CaptainPanel";
 import { ChipStrategyPanel } from "@/components/v5/ChipStrategyPanel";
 import { TeamRatingPanel } from "@/components/v5/TeamRatingPanel";
@@ -20,8 +22,7 @@ function EmptySquad() {
       <p className="font-label text-[11px] text-[var(--coral)]">No squad loaded</p>
       <h2 className="mt-2 text-[24px] font-extrabold text-[var(--navy)]">Scan your FPL team</h2>
       <p className="mt-2 max-w-md text-[14px] text-[var(--text-secondary)]">
-        Upload a screenshot from the FPL app to detect your starting XI and bench. Only players from your scan will
-        appear here.
+        Upload a screenshot from the FPL app. Dugout will build your gameweek plan in seconds.
       </p>
       <Link href="/upload" className="control btn-coral mt-6 px-6 py-3 text-[14px] font-bold">
         Scan squad
@@ -43,13 +44,18 @@ export default function MyTeamPage() {
 
   return (
     <AppLayout teamHeader={<TeamHeader />}>
-      <div className="dashboard-grid grid gap-4" style={{ gridTemplateColumns: "minmax(340px, 1.4fr) minmax(280px, 1fr) minmax(240px, 0.85fr)" }}>
+      <StrategyModeBar compact />
+      <WeeklyVerdictPanel />
+      <GameweekReadyPanel />
+      <div
+        className="dashboard-grid grid gap-4"
+        style={{ gridTemplateColumns: "minmax(340px, 1.4fr) minmax(280px, 1fr) minmax(240px, 0.85fr)" }}
+      >
         <div className="space-y-4">
           <PitchView squad={starters} />
           <BenchStrip bench={bench} />
         </div>
         <div className="space-y-4">
-          <AIVerdictPanel />
           <CaptainPanel />
         </div>
         <div className="dashboard-diagnostics space-y-4">
@@ -57,9 +63,7 @@ export default function MyTeamPage() {
           <PlayerDetailPanel />
         </div>
       </div>
-      <div className="mt-4">
-        <ChipStrategyPanel />
-      </div>
+      <ChipStrategyPanel />
       <ComparisonPanel />
       <FixtureWatchPanel />
     </AppLayout>

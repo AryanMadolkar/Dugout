@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useDashboard } from "@/context/DashboardContext";
+import { WhatIfPanel } from "@/components/v5/WhatIfPanel";
 import { Modal } from "@/components/v5/ui/Modal";
 
 export function MakeMoveModal() {
@@ -10,7 +11,7 @@ export function MakeMoveModal() {
   return (
     <Modal open={activeModal === "makeMove"} onClose={closeModal} title="Confirm transfer">
       <p className="text-[13px] text-[var(--text-secondary)]">
-        Transfer recommendations are not available yet. The optimiser will suggest moves based on your scanned squad.
+        Apply moves from the Transfer plan or run a What if? scenario first.
       </p>
       <button
         type="button"
@@ -24,18 +25,11 @@ export function MakeMoveModal() {
 }
 
 export function WhatIfModal() {
-  const { activeModal, closeModal, hasSquad } = useDashboard();
+  const { activeModal, closeModal } = useDashboard();
 
   return (
     <Modal open={activeModal === "whatIf"} onClose={closeModal} title="What if?" wide>
-      <p className="mb-3 text-[13px] text-[var(--text-secondary)]">
-        Scenario re-solving will be available once the optimiser is connected.
-      </p>
-      {!hasSquad ? (
-        <Link href="/upload" className="text-[13px] font-semibold text-[var(--coral)] hover:underline">
-          Scan your squad first →
-        </Link>
-      ) : null}
+      <WhatIfPanel />
       <button
         type="button"
         onClick={closeModal}
