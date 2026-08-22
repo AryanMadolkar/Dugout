@@ -10,6 +10,8 @@ const STRATEGY_KEY = "dugout-strategy";
 const BANK_KEY = "dugout-bank";
 const FT_KEY = "dugout-free-transfers";
 const RANK_KEY = "dugout-rank";
+const ENTRY_ID_KEY = "dugout-fpl-entry-id";
+const LEAGUE_ID_KEY = "dugout-fpl-league-id";
 
 export type PendingScan = SavedSquad & {
   unmatched: string[];
@@ -18,6 +20,11 @@ export type PendingScan = SavedSquad & {
     playing: string | null;
     status: Record<string, string>;
   } | null;
+  bank?: number;
+  freeTransfers?: number;
+  teamValue?: number;
+  entryId?: number;
+  leagueId?: number;
 };
 
 export function loadSquad(): SavedSquad | null {
@@ -175,6 +182,46 @@ export function saveFplRank(rank: number | null) {
     return;
   }
   sessionStorage.setItem(RANK_KEY, String(rank));
+}
+
+export function loadFplEntryId(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(ENTRY_ID_KEY);
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveFplEntryId(id: number | null) {
+  if (id == null) {
+    sessionStorage.removeItem(ENTRY_ID_KEY);
+    return;
+  }
+  sessionStorage.setItem(ENTRY_ID_KEY, String(id));
+}
+
+export function loadFplLeagueId(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(LEAGUE_ID_KEY);
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveFplLeagueId(id: number | null) {
+  if (id == null) {
+    sessionStorage.removeItem(LEAGUE_ID_KEY);
+    return;
+  }
+  sessionStorage.setItem(LEAGUE_ID_KEY, String(id));
 }
 
 export function formatScanTime(iso: string): string {

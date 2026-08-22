@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppLayout } from "@/components/v5/AppLayout";
 import { useDashboard } from "@/context/DashboardContext";
-import { fetchPlayers } from "@/lib/api";
+import { fetchEntrySummary, fetchPlayers } from "@/lib/api";
 import type { SquadPlayer } from "@/lib/dashboard-data";
 import { CLUB_COLORS } from "@/lib/dashboard-data";
 
@@ -15,6 +15,7 @@ export default function UploadConfirmPage() {
   const [fixId, setFixId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<SquadPlayer[]>([]);
+  const [syncing, setSyncing] = useState(false);
   const fixSectionRef = useRef<HTMLDivElement>(null);
   const fixInputRef = useRef<HTMLInputElement>(null);
 
@@ -149,6 +150,101 @@ export default function UploadConfirmPage() {
             Could not match: {pendingScan.unmatched.join(", ")}
           </p>
         ) : null}
+
+        <div className="panel mt-4 p-4">
+          <p className="font-label text-[11px] text-[var(--text-secondary)]">Manager context</p>
+          <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+            Pre-filled from scan when visible. Sync from FPL with your entry ID.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="block text-[12px]">
+              <span className="font-label text-[10px] text-[var(--text-secondary)]">Bank (£m)</span>
+              <input
+                type="number"
+                step="0.1"
+                value={pendingScan.bank ?? 0.5}
+                onChange={(e) =>
+                  updatePendingScan((prev) => ({ ...prev, bank: Number(e.target.value) || 0 }))
+                }
+                className="control mt-1 w-full border border-[var(--border)] px-2 py-1.5 text-[13px]"
+              />
+            </label>
+            <label className="block text-[12px]">
+              <span className="font-label text-[10px] text-[var(--text-secondary)]">Free transfers</span>
+              <input
+                type="number"
+                min={0}
+                max={2}
+                value={pendingScan.freeTransfers ?? 1}
+                onChange={(e) =>
+                  updatePendingScan((prev) => ({
+                    ...prev,
+                    freeTransfers: Math.max(0, Math.min(2, Number(e.target.value) || 0)),
+                  }))
+                }
+                className="control mt-1 w-full border border-[var(--border)] px-2 py-1.5 text-[13px]"
+              />
+            </label>
+            <label className="block text-[12px]">
+              <span className="font-label text-[10px] text-[var(--text-secondary)]">FPL entry ID</span>
+              <input
+                type="number"
+                value={pendingScan.entryId ?? ""}
+                placeholder="From FPL profile URL"
+                onChange={(e) =>
+                  updatePendingScan((prev) => ({
+                    ...prev,
+                    entryId: e.target.value ? Number(e.target.value) : undefined,
+                  }))
+                }
+                className="control mt-1 w-full border border-[var(--border)] px-2 py-1.5 text-[13px]"
+              />
+            </label>
+            <label className="block text-[12px]">
+              <span className="font-label text-[10px] text-[var(--text-secondary)]">Mini-league ID (optional)</span>
+              <input
+                type="number"
+                value={pendingScan.leagueId ?? ""}
+                placeholder="Defaults to first league"
+                onChange={(e) =>
+                  updatePendingScan((prev) => ({
+                    ...prev,
+                    leagueId: e.target.value ? Number(e.target.value) : undefined,
+                  }))
+                }
+                className="control mt-1 w-full border border-[var(--border)] px-2 py-1.5 text-[13px]"
+              />
+            </label>
+          </div>
+          {pendingScan.entryId != null ? (
+            <button
+              type="button"
+              disabled={syncing}
+              onClick={async () => {
+                if (!pendingScan.entryId) return;
+                setSyncing(true);
+                try {
+                  const summary = await fetchEntrySummary(pendingScan.entryId);
+                  updatePendingScan((prev) => ({
+                    ...prev,
+                    bank: summary.bank,
+                    freeTransfers: summary.freeTransfers,
+                    teamValue: summary.teamValue,
+                    entryId: summary.entryId,
+                    leagueId: prev.leagueId ?? summary.defaultLeagueId ?? undefined,
+                  }));
+                } catch {
+                  /* keep manual values */
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+              className="control mt-3 border border-[var(--border)] px-3 py-1.5 text-[12px] font-semibold hover:bg-[var(--canvas)] disabled:opacity-50"
+            >
+              {syncing ? "Syncing…" : "Sync bank & rank from FPL"}
+            </button>
+          ) : null}
+        </div>
 
         <div className="panel mt-4 divide-y divide-[var(--border)] overflow-hidden">
           {detected.length === 0 ? (

@@ -200,7 +200,11 @@ Return strict JSON, no markdown:
       "Bench Boost": "unknown",
       "Triple Captain": "unknown"
     }
-  }
+  },
+  "bank": 0.5,
+  "free_transfers": 1,
+  "team_value": 100.0,
+  "entry_id": null
 }
 Rules:
 - Include ONLY players clearly shown (starting XI + bench, max 15). Do NOT invent players.
@@ -210,6 +214,7 @@ Rules:
 - chips.playing: if a chip is clearly active / played for this gameweek in the UI (banner, selected chip, "Triple Captain" active, etc.), set to exactly one of "Wildcard"|"Free Hit"|"Bench Boost"|"Triple Captain", else null. Only ONE chip can be active per GW.
 - chips.status: "used" ONLY if the UI clearly shows the chip was already played / spent this season (e.g. "Played", used badge, crossed-out after use). "available" if clearly still usable. Otherwise "unknown".
 - CRITICAL: "Unavailable" / greyed / locked / disabled for this gameweek does NOT mean used — leave status as "unknown" (do not set "used"). Many chips show unavailable simply because they are not selected for this GW.
+- If visible, extract bank balance in millions (e.g. 0.5 for £0.5m), free_transfers count (0-2), team_value in millions, and FPL entry/manager ID if shown. Use null when not visible.
 """
 
 
@@ -252,7 +257,7 @@ def _normalize_chips(raw: Any) -> dict[str, Any]:
     return {"playing": playing, "status": status}
 
 
-def _parse_vision_payload(content: str) -> tuple[list[RawDetected], str | None, dict[str, Any]]:
+def _parse_vision_payload(content: str) -> tuple[list[RawDetected], str | None, dict[str, Any], dict[str, Any]]:
     text = _clean_json_text(content)
     data = json.loads(text)
     detected: list[RawDetected] = []
@@ -278,7 +283,7 @@ def _parse_vision_payload(content: str) -> tuple[list[RawDetected], str | None, 
                 confidence=float(item.get("confidence", 0.8)),
             )
         )
-    return detected, data.get("formation"), _normalize_chips(data.get("chips"))
+    return detected, data.get("formation"), _normalize_chips(data.get("chips")), _scan_meta(data)
 
 
 def _gemini_auth_attempts(api_key: str) -> list[tuple[dict[str, str], dict[str, str] | None]]:
@@ -349,10 +354,39 @@ GEMINI_VISION_MODELS = [
 ]
 
 
-def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | None, dict[str, Any]]:
+def _scan_meta(raw: dict[str, Any]) -> dict[str, Any]:
+    bank = raw.get("bank")
+    ft = raw.get("free_transfers")
+    value = raw.get("team_value")
+    entry_id = raw.get("entry_id")
+    meta: dict[str, Any] = {}
+    try:
+        if bank is not None:
+            meta["bank"] = round(float(bank), 1)
+    except (TypeError, ValueError):
+        pass
+    try:
+        if ft is not None:
+            meta["freeTransfers"] = max(0, min(2, int(ft)))
+    except (TypeError, ValueError):
+        pass
+    try:
+        if value is not None:
+            meta["teamValue"] = round(float(value), 1)
+    except (TypeError, ValueError):
+        pass
+    try:
+        if entry_id is not None:
+            meta["entryId"] = int(entry_id)
+    except (TypeError, ValueError):
+        pass
+    return meta
+
+
+def _detect_with_gemini(image: Image.Image) -> tuple[list[RawDetected], str | None, dict[str, Any], dict[str, Any]]:
     empty_chips = _normalize_chips(None)
     if not settings.gemini_api_key:
-        return [], None, empty_chips
+        return [], None, empty_chips, {}
 
     configured = settings.gemini_vision_model or GEMINI_VISION_MODELS[0]
     models = [configured, *GEMINI_VISION_MODELS]
@@ -396,7 +430,8 @@ def _detect_with_openai(image: Image.Image) -> tuple[list[RawDetected], str | No
         timeout=60.0,
     )
     content = response.json()["choices"][0]["message"]["content"]
-    return _parse_vision_payload(content)
+    detected, formation, chips, meta = _parse_vision_payload(content)
+    return detected, formation, chips, meta
 
 
 def _detect_with_ocr(image: Image.Image) -> list[RawDetected]:
@@ -471,10 +506,11 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
     scan_method = "ocr"
     vision_errors: list[str] = []
     chips: dict[str, Any] = _normalize_chips(None)
+    scan_meta: dict[str, Any] = {}
 
     if settings.gemini_api_key:
         try:
-            raw_detected, formation, chips = _detect_with_gemini(image)
+            raw_detected, formation, chips, scan_meta = _detect_with_gemini(image)
             if raw_detected:
                 scan_method = "gemini"
             else:
@@ -552,6 +588,10 @@ def scan_squad_image(db: Session, image_bytes: bytes) -> dict[str, Any]:
         "warnings": warnings,
         "scanMethod": scan_method,
         "chips": chips,
+        "bank": scan_meta.get("bank"),
+        "freeTransfers": scan_meta.get("freeTransfers"),
+        "teamValue": scan_meta.get("teamValue"),
+        "entryId": scan_meta.get("entryId"),
     }
 
 

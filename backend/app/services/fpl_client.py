@@ -21,7 +21,7 @@ class FPLClient:
     def _get(self, path: str) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
         headers = {
-            "User-Agent": "AI-FPL-Manager/0.1 (https://github.com/AryanMadolkar/Dugout)",
+            "User-Agent": "Dugout-FPL/1.0 (https://github.com/AryanMadolkar/Dugout)",
             "Accept": "application/json",
         }
         return http_get(url, headers=headers, timeout=self.timeout).json()
@@ -34,3 +34,19 @@ class FPLClient:
 
     def element_summary(self, player_id: int) -> dict[str, Any]:
         return self._get(f"element-summary/{player_id}/")
+
+    def entry(self, entry_id: int) -> dict[str, Any]:
+        return self._get(f"entry/{entry_id}/")
+
+    def entry_history(self, entry_id: int) -> dict[str, Any]:
+        return self._get(f"entry/{entry_id}/history/")
+
+    def entry_picks(self, entry_id: int, event: int) -> dict[str, Any]:
+        return self._get(f"entry/{entry_id}/event/{event}/picks/")
+
+    def entry_transfers(self, entry_id: int) -> list[dict[str, Any]]:
+        return self._get(f"entry/{entry_id}/transfers/")
+
+    def league_standings(self, league_id: int, page: int = 1) -> dict[str, Any]:
+        suffix = f"?page_standings={page}" if page > 1 else ""
+        return self._get(f"leagues-classic/{league_id}/standings/{suffix}")

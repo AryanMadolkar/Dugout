@@ -5,25 +5,42 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.schemas import (
+    AiAskOut,
+    AiAskRequest,
     AiPicksOut,
     AiPicksRequest,
     AiTransferAdviceOut,
     AiVerdictOut,
     AiVerdictRequest,
+    EntrySummaryOut,
     FixtureOut,
     GameweekOut,
+    GwReviewOut,
     IngestResult,
+    LeagueAnalysisOut,
     OverviewOut,
     PlayerHistoryGwOut,
     PlayerHistoryOut,
     PlayerOut,
     ScanResultOut,
     TeamOut,
+    TransferPlanOut,
 )
 from app.db.models import Fixture, Gameweek, IngestRun, Player, Team
 from app.db.session import get_db
-from app.services.ai_advice import generate_ai_picks, generate_transfer_advice, generate_verdict
+from app.services.ai_advice import (
+    generate_ai_picks,
+    generate_ask_dugout,
+    generate_transfer_advice,
+    generate_verdict,
+)
 from app.services.fpl_client import FPLClient
+from app.services.fpl_entry import (
+    build_gw_review,
+    build_multi_gw_transfer_plan,
+    fetch_entry_summary,
+    fetch_league_analysis,
+)
 from app.services.ingestion import current_gameweek, sync_bootstrap_and_fixtures
 
 router = APIRouter()
@@ -180,11 +197,20 @@ def list_players(
     return [_player_out(player) for player in db.scalars(stmt).unique().all()]
 
 
+def _advice_kwargs(body: AiVerdictRequest) -> dict:
+    return {
+        "bank": body.bank,
+        "free_transfers": body.freeTransfers,
+        "fpl_rank": body.fplRank,
+        "strategy_mode": body.strategyMode,
+    }
+
+
 @router.post("/ai/verdict", response_model=AiVerdictOut)
 def ai_verdict(body: AiVerdictRequest, db: Session = Depends(get_db)) -> AiVerdictOut:
     try:
         squad = [p.model_dump() for p in body.squad]
-        result = generate_verdict(db, squad, body.activeChip)
+        result = generate_verdict(db, squad, body.activeChip, **_advice_kwargs(body))
         return AiVerdictOut(
             headline=str(result.get("headline") or "Gemini squad verdict"),
             summary=str(result.get("summary") or ""),
@@ -205,7 +231,7 @@ def ai_transfers(body: AiVerdictRequest, db: Session = Depends(get_db)) -> AiTra
     """Transfer-page advice — not the same as home AI Verdict."""
     try:
         squad = [p.model_dump() for p in body.squad]
-        result = generate_transfer_advice(db, squad, body.activeChip)
+        result = generate_transfer_advice(db, squad, body.activeChip, **_advice_kwargs(body))
         return AiTransferAdviceOut(
             headline=str(result.get("headline") or "Transfer advice"),
             summary=str(result.get("summary") or ""),
@@ -231,6 +257,77 @@ def ai_picks(body: AiPicksRequest, db: Session = Depends(get_db)) -> AiPicksOut:
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"AI picks failed: {exc}") from exc
+
+
+@router.post("/ai/ask", response_model=AiAskOut)
+def ai_ask(body: AiAskRequest, db: Session = Depends(get_db)) -> AiAskOut:
+    try:
+        squad = [p.model_dump() for p in body.squad]
+        result = generate_ask_dugout(
+            db,
+            body.question,
+            squad,
+            body.activeChip,
+            body.bank,
+            body.freeTransfers,
+            body.fplRank,
+            body.strategyMode,
+        )
+        return AiAskOut(
+            verdict=str(result.get("verdict") or "MAYBE"),
+            headline=str(result.get("headline") or ""),
+            body=str(result.get("body") or ""),
+            confidence=int(result.get("confidence") or 55),
+            source=str(result.get("source") or "gemini"),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Ask Dugout failed: {exc}") from exc
+
+
+@router.post("/ai/transfer-plan", response_model=TransferPlanOut)
+def ai_transfer_plan(body: AiVerdictRequest, db: Session = Depends(get_db)) -> TransferPlanOut:
+    try:
+        squad = [p.model_dump() for p in body.squad]
+        bank = float(body.bank if body.bank is not None else 0.5)
+        ft = int(body.freeTransfers if body.freeTransfers is not None else 1)
+        result = build_multi_gw_transfer_plan(db, squad, bank, ft, horizon=6)
+        return TransferPlanOut(**result)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Transfer plan failed: {exc}") from exc
+
+
+@router.get("/fpl/entry/{entry_id}", response_model=EntrySummaryOut)
+def fpl_entry(entry_id: int, db: Session = Depends(get_db)) -> EntrySummaryOut:
+    try:
+        gw = current_gameweek(db)
+        current = gw.id if gw else None
+        result = fetch_entry_summary(entry_id, current)
+        return EntrySummaryOut(**result)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not load FPL entry: {exc}") from exc
+
+
+@router.get("/fpl/entry/{entry_id}/league", response_model=LeagueAnalysisOut)
+def fpl_league(
+    entry_id: int,
+    league_id: int | None = Query(default=None),
+) -> LeagueAnalysisOut:
+    try:
+        result = fetch_league_analysis(entry_id, league_id)
+        return LeagueAnalysisOut(**result)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not load league: {exc}") from exc
+
+
+@router.get("/fpl/entry/{entry_id}/review/{gameweek}", response_model=GwReviewOut)
+def fpl_gw_review(entry_id: int, gameweek: int, db: Session = Depends(get_db)) -> GwReviewOut:
+    try:
+        result = build_gw_review(db, entry_id, gameweek)
+        return GwReviewOut(**result)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"GW review failed: {exc}") from exc
 
 
 @router.get("/players/{player_id}/history", response_model=PlayerHistoryOut)

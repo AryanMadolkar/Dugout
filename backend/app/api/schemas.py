@@ -132,6 +132,83 @@ class SquadPlayerIn(BaseModel):
 class AiVerdictRequest(BaseModel):
     squad: list[SquadPlayerIn]
     activeChip: str | None = None
+    bank: float | None = None
+    freeTransfers: int | None = None
+    fplRank: int | None = None
+    strategyMode: str | None = None
+
+
+class AiAskRequest(BaseModel):
+    question: str
+    squad: list[SquadPlayerIn]
+    activeChip: str | None = None
+    bank: float | None = None
+    freeTransfers: int | None = None
+    fplRank: int | None = None
+    strategyMode: str | None = None
+
+
+class AiAskOut(BaseModel):
+    verdict: str
+    headline: str
+    body: str
+    confidence: int = 60
+    source: str = "gemini"
+
+
+class TransferPlanStepOut(BaseModel):
+    gameweek: int
+    action: str
+    move: dict | None = None
+    projectedGain: float = 0
+    bankAfter: float = 0
+    freeTransfersAfter: int | None = None
+    reason: str = ""
+
+
+class TransferPlanOut(BaseModel):
+    steps: list[TransferPlanStepOut]
+    totalGain4Gw: float = 0
+    totalGainHorizon: float = 0
+    wildcardWindow: int | None = None
+    source: str = "optimizer"
+
+
+class EntrySummaryOut(BaseModel):
+    entryId: int
+    name: str | None = None
+    bank: float
+    teamValue: float
+    rank: int | None = None
+    freeTransfers: int = 1
+    currentGameweek: int = 1
+    defaultLeagueId: int | None = None
+    defaultLeagueName: str | None = None
+
+
+class LeagueAnalysisOut(BaseModel):
+    yourRank: int | None = None
+    yourLeagueRank: int | None = None
+    rivalRank: int | None = None
+    rivalName: str | None = None
+    leagueName: str | None = None
+    leagueId: int | None = None
+    rivals: list[dict] = []
+
+
+class GwReviewOut(BaseModel):
+    gameweek: int
+    grade: str
+    decisionQuality: int
+    totalPoints: int = 0
+    averageScore: int = 0
+    captainDelta: float = 0
+    transferDelta: float = 0
+    benchDelta: float = 0
+    bestDecision: str = ""
+    worstDecision: str = ""
+    captain: str | None = None
+    source: str = "fpl"
 
 
 class AiTransferOut(BaseModel):
@@ -232,3 +309,7 @@ class ScanResultOut(BaseModel):
     warnings: list[str]
     scanMethod: str
     chips: ScanChipsOut | None = None
+    bank: float | None = None
+    freeTransfers: int | None = None
+    teamValue: float | None = None
+    entryId: int | None = None

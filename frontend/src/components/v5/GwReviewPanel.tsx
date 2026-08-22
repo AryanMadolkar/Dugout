@@ -1,38 +1,93 @@
 "use client";
 
-import { useMemo } from "react";
-import { useDashboard } from "@/context/DashboardContext";
-import { fetchOverview } from "@/lib/api";
 import { useEffect, useState } from "react";
-import { buildGwReview } from "@/lib/decision-store";
-import { resolveCaptainId } from "@/lib/projections";
+import { useDashboard } from "@/context/DashboardContext";
+import { fetchGwReview, fetchOverview } from "@/lib/api";
 import { SectionHead } from "./ui/SectionHead";
 
 export function GwReviewPanel() {
-  const { starters, hasSquad } = useDashboard();
-  const [gw, setGw] = useState(1);
+  const { hasSquad, fplEntryId } = useDashboard();
+  const [currentGw, setCurrentGw] = useState(1);
+  const [review, setReview] = useState<Awaited<ReturnType<typeof fetchGwReview>> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOverview()
-      .then((o) => setGw(o.current_gameweek?.id ?? 1))
-      .catch(() => setGw(1));
+      .then((o) => setCurrentGw(o.current_gameweek?.id ?? 1))
+      .catch(() => setCurrentGw(1));
   }, []);
 
-  const review = useMemo(() => {
-    if (!hasSquad) return null;
-    const captainId = resolveCaptainId(starters);
-    const captain = starters.find((p) => p.id === captainId)?.name ?? "Captain";
-    const weakest = [...starters]
-      .filter((p) => p.position !== "GKP")
-      .sort((a, b) => a.xp - b.xp)[0]?.name ?? "—";
-    return buildGwReview(gw, captain, weakest);
-  }, [hasSquad, starters, gw]);
+  useEffect(() => {
+    if (!hasSquad || fplEntryId == null) {
+      setReview(null);
+      return;
+    }
+    const reviewGw = Math.max(1, currentGw - 1);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchGwReview(fplEntryId, reviewGw)
+      .then((data) => {
+        if (!cancelled) setReview(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setReview(null);
+          setError(err instanceof Error ? err.message : "GW review unavailable");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasSquad, fplEntryId, currentGw]);
 
-  if (!review) return null;
+  if (!hasSquad) return null;
+
+  if (fplEntryId == null) {
+    return (
+      <section className="panel overflow-hidden">
+        <SectionHead title="Gameweek review" />
+        <p className="p-4 text-[13px] text-[var(--text-secondary)]">
+          Add your FPL entry ID on confirm or in rank strategy to load last week&apos;s review from FPL.
+        </p>
+      </section>
+    );
+  }
+
+  if (loading) {
+    return (
+      <section className="panel overflow-hidden">
+        <SectionHead title="Gameweek review" />
+        <p className="p-4 text-[13px] text-[var(--text-secondary)]">Loading finished GW from FPL…</p>
+      </section>
+    );
+  }
+
+  if (error || !review) {
+    return (
+      <section className="panel overflow-hidden">
+        <SectionHead title="Gameweek review" />
+        <p className="p-4 text-[13px] text-[var(--text-secondary)]">
+          {error ?? "No finished gameweek data yet."}
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="panel overflow-hidden">
-      <SectionHead title={`Gameweek ${review.gameweek} review`} />
+      <SectionHead
+        title={`Gameweek ${review.gameweek} review`}
+        right={
+          <span className="text-[10px] text-[var(--text-secondary)]">
+            {review.totalPoints} pts · avg {review.averageScore}
+          </span>
+        }
+      />
       <div className="p-4">
         <div className="flex items-end gap-3">
           <p className="text-[42px] font-extrabold leading-none text-[var(--navy)]">{review.grade}</p>

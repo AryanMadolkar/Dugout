@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
 import { fetchAiVerdict, fetchOverview, type AiVerdict } from "@/lib/api";
+import { managerAdviceContext, squadToApiPayload } from "@/lib/advice-context";
+import { recordVerdictAsRecommendation } from "@/lib/decision-store";
 import { estimatePlayerXp } from "@/lib/projections";
 import { rankCaptainCandidates } from "@/lib/strategy-mode";
 import { recommendChipStrategy } from "@/lib/chip-strategy";
@@ -21,15 +23,17 @@ function inferFormation(starters: { row: string; position: string }[]): string {
 }
 
 export function WeeklyVerdictPanel({ compact }: { compact?: boolean }) {
-  const { hasSquad, allPlayers, starters, bench, activeChip, squad, strategyMode, chipUsage } = useDashboard();
+  const { hasSquad, allPlayers, starters, bench, activeChip, squad, strategyMode, chipUsage, bank, freeTransfers, fplRank } =
+    useDashboard();
   const [verdict, setVerdict] = useState<AiVerdict | null>(null);
   const [gw, setGw] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const squadKey = useMemo(
-    () => `${squad?.scannedAt ?? ""}:${allPlayers.map((p) => p.id).join(",")}:${activeChip ?? ""}:${strategyMode}`,
-    [squad?.scannedAt, allPlayers, activeChip, strategyMode],
+    () =>
+      `${squad?.scannedAt ?? ""}:${allPlayers.map((p) => p.id).join(",")}:${activeChip ?? ""}:${strategyMode}:${bank}:${freeTransfers}:${fplRank ?? ""}`,
+    [squad?.scannedAt, allPlayers, activeChip, strategyMode, bank, freeTransfers, fplRank],
   );
 
   useEffect(() => {
@@ -47,23 +51,15 @@ export function WeeklyVerdictPanel({ compact }: { compact?: boolean }) {
     setLoading(true);
     setError(null);
     fetchAiVerdict(
-      allPlayers.map((p) => ({
-        id: p.id,
-        fplId: p.fplId,
-        name: p.name,
-        club: p.club,
-        position: p.position,
-        price: p.price,
-        xp: p.xp,
-        form: p.form,
-        ownership: p.ownership,
-        isCaptain: p.isCaptain,
-        slot: p.slot,
-      })),
+      squadToApiPayload(allPlayers),
       activeChip,
+      managerAdviceContext({ bank, freeTransfers, fplRank, strategyMode }),
     )
       .then((data) => {
-        if (!cancelled) setVerdict(data);
+        if (!cancelled) {
+          setVerdict(data);
+          if (gw != null) recordVerdictAsRecommendation(gw, data);
+        }
       })
       .catch((err) => {
         if (!cancelled) {
@@ -77,7 +73,7 @@ export function WeeklyVerdictPanel({ compact }: { compact?: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [hasSquad, squadKey]);
+  }, [hasSquad, squadKey, gw, bank, freeTransfers, fplRank, strategyMode, allPlayers, activeChip]);
 
   const captainRank = useMemo(
     () => (hasSquad ? rankCaptainCandidates(starters, strategyMode) : []),

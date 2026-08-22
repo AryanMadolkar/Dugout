@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ChipAvailability, ChipName, ChipUsageMap, SavedSquad, SquadPlayer } from "@/lib/dashboard-data";
 import { DEFAULT_CHIP_USAGE } from "@/lib/dashboard-data";
-import { fetchPlayers } from "@/lib/api";
+import { fetchEntrySummary, fetchPlayers } from "@/lib/api";
 import type { Player } from "@/lib/types";
 import {
   clearActiveChip,
@@ -13,6 +13,8 @@ import {
   loadActiveChip,
   loadBank,
   loadChipUsage,
+  loadFplEntryId,
+  loadFplLeagueId,
   loadFplRank,
   loadFreeTransfers,
   loadPendingScan,
@@ -21,6 +23,8 @@ import {
   saveActiveChip,
   saveBank,
   saveChipUsage,
+  saveFplEntryId,
+  saveFplLeagueId,
   saveFplRank,
   saveFreeTransfers,
   savePendingScan,
@@ -88,6 +92,11 @@ type DashboardContextValue = {
   setFreeTransfers: (ft: number) => void;
   fplRank: number | null;
   setFplRank: (rank: number | null) => void;
+  fplEntryId: number | null;
+  setFplEntryId: (id: number | null) => void;
+  fplLeagueId: number | null;
+  setFplLeagueId: (id: number | null) => void;
+  syncFromFpl: () => Promise<void>;
   setCaptain: (playerId: string) => void;
   clearScannedSquad: () => void;
 };
@@ -106,6 +115,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [bank, setBankState] = useState(0.5);
   const [freeTransfers, setFreeTransfersState] = useState(1);
   const [fplRank, setFplRankState] = useState<number | null>(null);
+  const [fplEntryId, setFplEntryIdState] = useState<number | null>(null);
+  const [fplLeagueId, setFplLeagueIdState] = useState<number | null>(null);
 
   useEffect(() => {
     setSquad(loadSquad());
@@ -116,6 +127,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     setBankState(loadBank());
     setFreeTransfersState(loadFreeTransfers());
     setFplRankState(loadFplRank());
+    setFplEntryIdState(loadFplEntryId());
+    setFplLeagueIdState(loadFplLeagueId());
     setHydrated(true);
   }, []);
 
@@ -209,6 +222,23 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       saveActiveChip(playing);
       setActiveChipState(playing);
     }
+
+    if (pendingScan.bank != null) {
+      saveBank(pendingScan.bank);
+      setBankState(pendingScan.bank);
+    }
+    if (pendingScan.freeTransfers != null) {
+      saveFreeTransfers(pendingScan.freeTransfers);
+      setFreeTransfersState(pendingScan.freeTransfers);
+    }
+    if (pendingScan.entryId != null) {
+      saveFplEntryId(pendingScan.entryId);
+      setFplEntryIdState(pendingScan.entryId);
+    }
+    if (pendingScan.leagueId != null) {
+      saveFplLeagueId(pendingScan.leagueId);
+      setFplLeagueIdState(pendingScan.leagueId);
+    }
   }, [pendingScan]);
 
   const setChipAvailability = useCallback((name: ChipName, status: ChipAvailability) => {
@@ -263,6 +293,40 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     saveFplRank(rank);
     setFplRankState(rank);
   }, []);
+
+  const setFplEntryId = useCallback((id: number | null) => {
+    saveFplEntryId(id);
+    setFplEntryIdState(id);
+  }, []);
+
+  const setFplLeagueId = useCallback((id: number | null) => {
+    saveFplLeagueId(id);
+    setFplLeagueIdState(id);
+  }, []);
+
+  const syncFromFpl = useCallback(async () => {
+    if (fplEntryId == null) return;
+    const summary = await fetchEntrySummary(fplEntryId);
+    saveBank(summary.bank);
+    setBankState(summary.bank);
+    saveFreeTransfers(summary.freeTransfers);
+    setFreeTransfersState(summary.freeTransfers);
+    if (summary.rank != null) {
+      saveFplRank(summary.rank);
+      setFplRankState(summary.rank);
+    }
+    if (summary.defaultLeagueId != null && fplLeagueId == null) {
+      saveFplLeagueId(summary.defaultLeagueId);
+      setFplLeagueIdState(summary.defaultLeagueId);
+    }
+  }, [fplEntryId, fplLeagueId]);
+
+  useEffect(() => {
+    if (!hydrated || fplEntryId == null) return;
+    syncFromFpl().catch(() => {
+      /* keep stored values */
+    });
+  }, [hydrated, fplEntryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setCaptain = useCallback(
     (playerId: string) => {
@@ -347,6 +411,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setFreeTransfers,
       fplRank,
       setFplRank,
+      fplEntryId,
+      setFplEntryId,
+      fplLeagueId,
+      setFplLeagueId,
+      syncFromFpl,
       setCaptain,
       clearScannedSquad,
     }),
@@ -379,6 +448,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setBank,
       setFreeTransfers,
       setFplRank,
+      fplEntryId,
+      fplLeagueId,
+      syncFromFpl,
+      setFplEntryId,
+      setFplLeagueId,
       setCaptain,
       clearScannedSquad,
     ],

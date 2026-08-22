@@ -4,27 +4,15 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
 import { fetchTransferAdvice, type TransferAdvice } from "@/lib/api";
+import { managerAdviceContext, squadToApiPayload } from "@/lib/advice-context";
 import { SectionHead } from "./ui/SectionHead";
 
 function squadPayload(allPlayers: ReturnType<typeof useDashboard>["allPlayers"]) {
-  return allPlayers.map((p) => ({
-    id: p.id,
-    fplId: p.fplId,
-    name: p.name,
-    club: p.club,
-    position: p.position,
-    price: p.price,
-    xp: p.xp,
-    form: p.form,
-    ownership: p.ownership,
-    isCaptain: p.isCaptain,
-    isVice: p.isVice,
-    slot: p.slot,
-  }));
+  return squadToApiPayload(allPlayers);
 }
 
 export function TransferAdvicePanel() {
-  const { hasSquad, allPlayers, activeChip, squad } = useDashboard();
+  const { hasSquad, allPlayers, activeChip, squad, bank, freeTransfers, fplRank, strategyMode } = useDashboard();
   const [advice, setAdvice] = useState<TransferAdvice | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +30,11 @@ export function TransferAdvicePanel() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchTransferAdvice(squadPayload(allPlayers), activeChip)
+    fetchTransferAdvice(
+      squadPayload(allPlayers),
+      activeChip,
+      managerAdviceContext({ bank, freeTransfers, fplRank, strategyMode }),
+    )
       .then((data) => {
         if (!cancelled) setAdvice(data);
       })

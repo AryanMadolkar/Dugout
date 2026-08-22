@@ -1,5 +1,6 @@
 import type { Fixture, IngestResult, Overview, Player } from "./types";
 import type { SavedSquad, SquadPlayer } from "./dashboard-data";
+import type { PendingScan } from "./squad-storage";
 
 function withProtocol(url: string): string {
   if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/")) return url;
@@ -100,11 +101,37 @@ export type AiVerdict = {
   gameweek: number | null;
 };
 
-export async function fetchAiVerdict(squad: unknown[], activeChip: string | null): Promise<AiVerdict> {
+export type ManagerContext = {
+  bank?: number;
+  freeTransfers?: number;
+  fplRank?: number | null;
+  strategyMode?: string;
+};
+
+function squadRequestBody(
+  squad: unknown[],
+  activeChip: string | null,
+  ctx?: ManagerContext,
+) {
+  return {
+    squad,
+    activeChip,
+    bank: ctx?.bank,
+    freeTransfers: ctx?.freeTransfers,
+    fplRank: ctx?.fplRank ?? undefined,
+    strategyMode: ctx?.strategyMode,
+  };
+}
+
+export async function fetchAiVerdict(
+  squad: unknown[],
+  activeChip: string | null,
+  ctx?: ManagerContext,
+): Promise<AiVerdict> {
   const response = await fetch(`${getApiUrl()}/api/ai/verdict`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ squad, activeChip }),
+    body: JSON.stringify(squadRequestBody(squad, activeChip, ctx)),
   });
   if (!response.ok) {
     let detail = `Gemini verdict failed (${response.status})`;
@@ -146,11 +173,12 @@ export type TransferAdvice = {
 export async function fetchTransferAdvice(
   squad: unknown[],
   activeChip: string | null,
+  ctx?: ManagerContext,
 ): Promise<TransferAdvice> {
   const response = await fetch(`${getApiUrl()}/api/ai/transfers`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ squad, activeChip }),
+    body: JSON.stringify(squadRequestBody(squad, activeChip, ctx)),
   });
   if (!response.ok) {
     let detail = `Transfer advice failed (${response.status})`;
@@ -163,6 +191,129 @@ export async function fetchTransferAdvice(
     throw new Error(detail);
   }
   return response.json() as Promise<TransferAdvice>;
+}
+
+export type AiAskResponse = {
+  verdict: string;
+  headline: string;
+  body: string;
+  confidence: number;
+  source: string;
+};
+
+export async function fetchAiAsk(
+  question: string,
+  squad: unknown[],
+  activeChip: string | null,
+  ctx?: ManagerContext,
+): Promise<AiAskResponse> {
+  const response = await fetch(`${getApiUrl()}/api/ai/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, ...squadRequestBody(squad, activeChip, ctx) }),
+  });
+  if (!response.ok) {
+    let detail = `Ask Dugout failed (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<AiAskResponse>;
+}
+
+export type TransferPlanStep = {
+  gameweek: number;
+  action: string;
+  move: TransferAdviceMove | null;
+  projectedGain: number;
+  bankAfter: number;
+  freeTransfersAfter?: number;
+  reason: string;
+};
+
+export type TransferPlan = {
+  steps: TransferPlanStep[];
+  totalGain4Gw: number;
+  totalGainHorizon: number;
+  wildcardWindow: number | null;
+  source: string;
+};
+
+export async function fetchTransferPlan(
+  squad: unknown[],
+  activeChip: string | null,
+  ctx?: ManagerContext,
+): Promise<TransferPlan> {
+  const response = await fetch(`${getApiUrl()}/api/ai/transfer-plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(squadRequestBody(squad, activeChip, ctx)),
+  });
+  if (!response.ok) {
+    let detail = `Transfer plan failed (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<TransferPlan>;
+}
+
+export type EntrySummary = {
+  entryId: number;
+  name: string | null;
+  bank: number;
+  teamValue: number;
+  rank: number | null;
+  freeTransfers: number;
+  currentGameweek: number;
+  defaultLeagueId: number | null;
+  defaultLeagueName: string | null;
+};
+
+export function fetchEntrySummary(entryId: number) {
+  return getJson<EntrySummary>(`/api/fpl/entry/${entryId}`);
+}
+
+export type LeagueAnalysis = {
+  yourRank: number | null;
+  yourLeagueRank: number | null;
+  rivalRank: number | null;
+  rivalName: string | null;
+  leagueName: string | null;
+  leagueId: number | null;
+  rivals: { name?: string; rank?: number; total?: number; entry?: number }[];
+};
+
+export function fetchLeagueAnalysis(entryId: number, leagueId?: number | null) {
+  const qs = leagueId != null ? `?league_id=${leagueId}` : "";
+  return getJson<LeagueAnalysis>(`/api/fpl/entry/${entryId}/league${qs}`);
+}
+
+export type GwReview = {
+  gameweek: number;
+  grade: string;
+  decisionQuality: number;
+  totalPoints: number;
+  averageScore: number;
+  captainDelta: number;
+  transferDelta: number;
+  benchDelta: number;
+  bestDecision: string;
+  worstDecision: string;
+  captain: string | null;
+  source: string;
+};
+
+export function fetchGwReview(entryId: number, gameweek: number) {
+  return getJson<GwReview>(`/api/fpl/entry/${entryId}/review/${gameweek}`);
 }
 
 export async function triggerIngest(): Promise<IngestResult> {
@@ -187,6 +338,10 @@ export type ScanApiResult = {
   warnings: string[];
   scanMethod: string;
   chips?: ScanChips | null;
+  bank?: number | null;
+  freeTransfers?: number | null;
+  teamValue?: number | null;
+  entryId?: number | null;
 };
 
 function mapScanPlayer(raw: Record<string, unknown>): SquadPlayer {
@@ -268,6 +423,10 @@ export async function scanSquadImage(file: File): Promise<ScanApiResult> {
     warnings: string[];
     scanMethod: string;
     chips?: ScanChips | null;
+    bank?: number | null;
+    freeTransfers?: number | null;
+    teamValue?: number | null;
+    entryId?: number | null;
   };
   return {
     formation: data.formation,
@@ -277,12 +436,14 @@ export async function scanSquadImage(file: File): Promise<ScanApiResult> {
     warnings: data.warnings,
     scanMethod: data.scanMethod,
     chips: data.chips ?? null,
+    bank: data.bank ?? null,
+    freeTransfers: data.freeTransfers ?? null,
+    teamValue: data.teamValue ?? null,
+    entryId: data.entryId ?? null,
   };
 }
 
-export function scanResultToPending(
-  result: ScanApiResult,
-): SavedSquad & { unmatched: string[]; scanMethod: string; chips?: ScanChips | null } {
+export function scanResultToPending(result: ScanApiResult): PendingScan {
   return {
     formation: result.formation,
     starters: result.starters,
@@ -292,5 +453,9 @@ export function scanResultToPending(
     unmatched: result.unmatched,
     scanMethod: result.scanMethod,
     chips: result.chips ?? null,
+    bank: result.bank ?? undefined,
+    freeTransfers: result.freeTransfers ?? undefined,
+    teamValue: result.teamValue ?? undefined,
+    entryId: result.entryId ?? undefined,
   };
 }

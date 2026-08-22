@@ -110,10 +110,19 @@ def _heuristic_verdict(
     }
 
 
-def generate_verdict(db: Session, squad: list[dict[str, Any]], chip: str | None = None) -> dict[str, Any]:
+def generate_verdict(
+    db: Session,
+    squad: list[dict[str, Any]],
+    chip: str | None = None,
+    bank: float | None = None,
+    free_transfers: int | None = None,
+    fpl_rank: int | None = None,
+    strategy_mode: str | None = None,
+) -> dict[str, Any]:
     _ensure_players(db)
     gw = current_gameweek(db)
     gw_label = f"GW{gw.id}" if gw else "the next gameweek"
+    mgr = _manager_context(bank, free_transfers, fpl_rank, strategy_mode)
 
     owned_ids = {int(p["fplId"]) for p in squad if p.get("fplId") is not None}
     pool = db.scalars(
@@ -126,6 +135,7 @@ def generate_verdict(db: Session, squad: list[dict[str, Any]], chip: str | None 
 
     prompt = f"""You are an elite Fantasy Premier League analyst. Use ONLY the provided FPL data — do not invent players.
 Season context: upcoming {gw_label}. Active chip for projection: {chip or "none"}.
+Manager context: {mgr}
 
 Manager's current squad (JSON):
 {_squad_context(squad)}
@@ -363,11 +373,16 @@ def generate_transfer_advice(
     db: Session,
     squad: list[dict[str, Any]],
     chip: str | None = None,
+    bank: float | None = None,
+    free_transfers: int | None = None,
+    fpl_rank: int | None = None,
+    strategy_mode: str | None = None,
 ) -> dict[str, Any]:
     """Transfer-focused advice for the Transfers page (Gemini with heuristic fallback)."""
     _ensure_players(db)
     gw = current_gameweek(db)
     gw_label = f"GW{gw.id}" if gw else "the next gameweek"
+    mgr = _manager_context(bank, free_transfers, fpl_rank, strategy_mode)
 
     owned_ids = {int(p["fplId"]) for p in squad if p.get("fplId") is not None}
     pool = (
@@ -384,6 +399,7 @@ def generate_transfer_advice(
 
     prompt = f"""You are an elite Fantasy Premier League transfer analyst.
 Upcoming {gw_label}. Active chip: {chip or "none"}.
+Manager context: {mgr}
 Recommend 1-3 concrete transfers for THIS manager only. Same-position swaps preferred. Do not invent players.
 
 Squad JSON:
@@ -451,3 +467,129 @@ If no good moves, action Hold and empty transfers. Max 3 transfers. Prefer highe
         return data
     except Exception:
         return _heuristic_transfers(squad, candidates, gw.id if gw else None)
+
+
+def _manager_context(
+    bank: float | None,
+    free_transfers: int | None,
+    fpl_rank: int | None,
+    strategy_mode: str | None,
+) -> str:
+    parts = []
+    if bank is not None:
+        parts.append(f"Bank: £{bank:.1f}m")
+    if free_transfers is not None:
+        parts.append(f"Free transfers: {free_transfers}")
+    if fpl_rank is not None:
+        parts.append(f"Overall rank: {fpl_rank:,}")
+    if strategy_mode:
+        parts.append(f"Strategy: {strategy_mode}")
+    return " · ".join(parts) if parts else "No budget/rank context provided."
+
+
+def _heuristic_ask(
+    question: str,
+    squad: list[dict[str, Any]],
+    chip: str | None,
+    bank: float | None,
+    free_transfers: int | None,
+    gw_id: int | None,
+) -> dict[str, Any]:
+    q = question.lower()
+    starters = [p for p in squad if str(p.get("slot") or "starter") != "bench"]
+    by_xp = sorted(starters, key=lambda p: float(p.get("xp") or 0), reverse=True)
+    captain = by_xp[0] if by_xp else None
+    weakest = sorted(starters, key=lambda p: float(p.get("xp") or 0))[0] if starters else None
+
+    if "-4" in q or "hit" in q:
+        return {
+            "verdict": "NO",
+            "headline": "Avoid the hit unless gain clears +4 xP",
+            "body": (
+                f"With {free_transfers or 1} FT and £{(bank or 0):.1f}m in the bank, "
+                f"a -4 only makes sense if the incoming player beats {weakest.get('name') if weakest else 'your target'} "
+                "by more than 4 projected points this GW."
+            ),
+            "confidence": 55,
+            "source": "heuristic",
+        }
+    if "captain" in q:
+        name = captain.get("name") if captain else "your top xP pick"
+        return {
+            "verdict": "YES",
+            "headline": f"Captain {name}",
+            "body": "Highest projected points in your XI with the best minutes/fixture blend.",
+            "confidence": 62,
+            "source": "heuristic",
+        }
+    if "wildcard" in q or " wc" in q:
+        return {
+            "verdict": "MAYBE",
+            "headline": "Wildcard only for structural fixes",
+            "body": "Save unless 3+ starters need changing for fixture pain or injuries.",
+            "confidence": 50,
+            "source": "heuristic",
+        }
+    if "bench" in q:
+        bench = [p for p in squad if str(p.get("slot")) == "bench"]
+        first = bench[0].get("name") if bench else "backup GK"
+        return {
+            "verdict": "YES",
+            "headline": f"Bench order: {first} first",
+            "body": "Keep backup goalkeeper first, then outfield by projected points.",
+            "confidence": 58,
+            "source": "heuristic",
+        }
+    return {
+        "verdict": "MAYBE",
+        "headline": "Need a sharper question",
+        "body": "Try: captain, -4 hit, wildcard, bench, or a named player sell/buy.",
+        "confidence": 40,
+        "source": "heuristic",
+    }
+
+
+def generate_ask_dugout(
+    db: Session,
+    question: str,
+    squad: list[dict[str, Any]],
+    chip: str | None = None,
+    bank: float | None = None,
+    free_transfers: int | None = None,
+    fpl_rank: int | None = None,
+    strategy_mode: str | None = None,
+) -> dict[str, Any]:
+    _ensure_players(db)
+    gw = current_gameweek(db)
+    ctx = _manager_context(bank, free_transfers, fpl_rank, strategy_mode)
+
+    prompt = f"""You are Dugout — a concise FPL decision coach. Answer in under 80 words.
+Do NOT invent players. Use ONLY the squad JSON.
+
+Question: {question}
+Manager context: {ctx}
+Active chip: {chip or "none"}
+Gameweek: {f"GW{gw.id}" if gw else "next"}
+
+Squad:
+{_squad_context(squad)}
+
+Return strict JSON:
+{{
+  "verdict": "YES" | "NO" | "MAYBE",
+  "headline": "short answer title",
+  "body": "2-3 sentences, decision-oriented",
+  "confidence": 0-100,
+  "source": "gemini"
+}}
+"""
+
+    try:
+        data = gemini_generate_json(prompt, temperature=0.35)
+        if not isinstance(data, dict):
+            raise RuntimeError("Ask Dugout was not a JSON object")
+        data["source"] = "gemini"
+        data["verdict"] = str(data.get("verdict") or "MAYBE").upper()
+        return data
+    except Exception:
+        return _heuristic_ask(question, squad, chip, bank, free_transfers, gw.id if gw else None)

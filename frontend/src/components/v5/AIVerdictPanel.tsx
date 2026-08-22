@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
 import { fetchAiVerdict, type AiVerdict } from "@/lib/api";
+import { managerAdviceContext, squadToApiPayload } from "@/lib/advice-context";
 import { SectionHead } from "./ui/SectionHead";
 
 export function AIVerdictPanel() {
-  const { hasSquad, allPlayers, activeChip, squad } = useDashboard();
+  const { hasSquad, allPlayers, activeChip, squad, bank, freeTransfers, fplRank, strategyMode } = useDashboard();
   const [verdict, setVerdict] = useState<AiVerdict | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,21 +27,9 @@ export function AIVerdictPanel() {
     setLoading(true);
     setError(null);
     fetchAiVerdict(
-      allPlayers.map((p) => ({
-        id: p.id,
-        fplId: p.fplId,
-        name: p.name,
-        club: p.club,
-        position: p.position,
-        price: p.price,
-        xp: p.xp,
-        form: p.form,
-        ownership: p.ownership,
-        isCaptain: p.isCaptain,
-        isVice: p.isVice,
-        slot: p.slot,
-      })),
+      squadToApiPayload(allPlayers),
       activeChip,
+      managerAdviceContext({ bank, freeTransfers, fplRank, strategyMode }),
     )
       .then((data) => {
         if (!cancelled) setVerdict(data);

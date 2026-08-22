@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
 import { fetchAiVerdict, fetchOverview, fetchTransferAdvice } from "@/lib/api";
+import { managerAdviceContext, squadToApiPayload } from "@/lib/advice-context";
 import { buildGameweekReady } from "@/lib/gameweek-ready";
 import { SectionHead } from "./ui/SectionHead";
 
 export function GameweekReadyPanel() {
-  const { hasSquad, squad, starters, bench, activeChip, openModal } = useDashboard();
+  const { hasSquad, squad, starters, bench, activeChip, openModal, bank, freeTransfers, fplRank, strategyMode } =
+    useDashboard();
   const [gw, setGw] = useState<number | null>(null);
   const [verdict, setVerdict] = useState<Awaited<ReturnType<typeof fetchAiVerdict>> | null>(null);
   const [transfer, setTransfer] = useState<Awaited<ReturnType<typeof fetchTransferAdvice>> | null>(null);
@@ -20,19 +22,9 @@ export function GameweekReadyPanel() {
 
   useEffect(() => {
     if (!hasSquad) return;
-    const payload = [...starters, ...bench].map((p) => ({
-      id: p.id,
-      name: p.name,
-      club: p.club,
-      position: p.position,
-      price: p.price,
-      xp: p.xp,
-      form: p.form,
-      ownership: p.ownership,
-      isCaptain: p.isCaptain,
-      slot: p.slot,
-    }));
-    Promise.all([fetchAiVerdict(payload, activeChip), fetchTransferAdvice(payload, activeChip)])
+    const payload = squadToApiPayload([...starters, ...bench]);
+    const ctx = managerAdviceContext({ bank, freeTransfers, fplRank, strategyMode });
+    Promise.all([fetchAiVerdict(payload, activeChip, ctx), fetchTransferAdvice(payload, activeChip, ctx)])
       .then(([v, t]) => {
         setVerdict(v);
         setTransfer(t);
@@ -41,7 +33,7 @@ export function GameweekReadyPanel() {
         setVerdict(null);
         setTransfer(null);
       });
-  }, [hasSquad, starters, bench, activeChip]);
+  }, [hasSquad, starters, bench, activeChip, bank, freeTransfers, fplRank, strategyMode]);
 
   const ready = useMemo(() => {
     if (!squad) return null;

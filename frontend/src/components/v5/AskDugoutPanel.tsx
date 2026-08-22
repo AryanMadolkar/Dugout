@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useDashboard } from "@/context/DashboardContext";
-import { estimatePlayerXp } from "@/lib/projections";
-import { recommendChipStrategy } from "@/lib/chip-strategy";
-import { rankCaptainCandidates } from "@/lib/strategy-mode";
+import { fetchAiAsk } from "@/lib/api";
+import { managerAdviceContext, squadToApiPayload } from "@/lib/advice-context";
 import { SectionHead } from "./ui/SectionHead";
 
 const PRESETS = [
@@ -15,64 +14,51 @@ const PRESETS = [
   "Should I play Bench Boost?",
 ];
 
-function answerQuestion(
-  q: string,
-  ctx: {
-    captain: string;
-    transfer: string;
-    chip: string;
-    weakest: string;
-    benchLow: string;
-    hitWorth: boolean;
-  },
-): { headline: string; body: string; verdict: "YES" | "NO" | "MAYBE" } {
-  const lower = q.toLowerCase();
-  if (lower.includes("-4") || lower.includes("hit")) {
-    return ctx.hitWorth
-      ? { verdict: "MAYBE", headline: "Only if the gain clears +4 xP", body: `${ctx.transfer}. Net gain after -4 may still be positive — check minutes before deadline.` }
-      : { verdict: "NO", headline: "No — wait", body: `Projected gain doesn't clear the -4 after accounting for variance. ${ctx.weakest} is the weak link but rolling may be smarter.` };
-  }
-  if (lower.includes("captain")) {
-    return { verdict: "YES", headline: `Captain ${ctx.captain}`, body: "Highest blend of xP, minutes and fixture in your current risk mode." };
-  }
-  if (lower.includes("wildcard") || lower.includes("wc")) {
-    return ctx.chip.includes("Wildcard")
-      ? { verdict: "MAYBE", headline: "Wildcard window approaching", body: ctx.chip }
-      : { verdict: "NO", headline: "Save Wildcard", body: "No structural rebuild needed this week — chip value higher later." };
-  }
-  if (lower.includes("bench")) {
-    return { verdict: "YES", headline: `Bench ${ctx.benchLow} first`, body: "Lowest projected starter — auto-sub order should protect your XI." };
-  }
-  if (lower.includes("bench boost") || lower.includes("bb")) {
-    return { verdict: "MAYBE", headline: "Bench Boost situational", body: ctx.chip };
-  }
-  return { verdict: "MAYBE", headline: "Ask something specific", body: "Try captain, -4, wildcard, or bench questions." };
-}
-
 export function AskDugoutPanel() {
-  const { hasSquad, starters, bench, strategyMode, chipUsage, activeChip, bank, freeTransfers, fplRank } =
-    useDashboard();
+  const {
+    hasSquad,
+    allPlayers,
+    strategyMode,
+    activeChip,
+    bank,
+    freeTransfers,
+    fplRank,
+  } = useDashboard();
   const [question, setQuestion] = useState(PRESETS[1]);
   const [custom, setCustom] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [response, setResponse] = useState<{
+    verdict: string;
+    headline: string;
+    body: string;
+  } | null>(null);
 
-  const ctx = useMemo(() => {
-    const cap = rankCaptainCandidates(starters, strategyMode)[0]?.player.name ?? "—";
-    const chip = recommendChipStrategy(starters, bench, chipUsage);
-    const weakest = [...starters].filter((p) => p.position !== "GKP").sort((a, b) => a.xp - b.xp)[0]?.name ?? "—";
-    const benchLow = bench[bench.length - 1]?.name ?? "—";
-    return {
-      captain: cap,
-      transfer: `Weakest: ${weakest}`,
-      chip: chip?.headline ?? "Hold chips",
-      weakest,
-      benchLow,
-      hitWorth: false,
-    };
-  }, [starters, bench, strategyMode, chipUsage]);
-
-  const response = useMemo(
-    () => answerQuestion(custom || question, ctx),
-    [custom, question, ctx],
+  const ask = useCallback(
+    async (q: string) => {
+      if (!hasSquad || !q.trim()) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchAiAsk(
+          q.trim(),
+          squadToApiPayload(allPlayers),
+          activeChip,
+          managerAdviceContext({ bank, freeTransfers, fplRank, strategyMode }),
+        );
+        setResponse({
+          verdict: data.verdict,
+          headline: data.headline,
+          body: data.body,
+        });
+      } catch (err) {
+        setResponse(null);
+        setError(err instanceof Error ? err.message : "Ask Dugout unavailable");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [hasSquad, allPlayers, activeChip, bank, freeTransfers, fplRank, strategyMode],
   );
 
   if (!hasSquad) {
@@ -103,6 +89,7 @@ export function AskDugoutPanel() {
               onClick={() => {
                 setQuestion(p);
                 setCustom("");
+                void ask(p);
               }}
               className={`control px-2 py-1 text-[10px] font-semibold ${
                 question === p && !custom ? "bg-[var(--navy)] text-white" : "border border-[var(--border)]"
@@ -112,29 +99,51 @@ export function AskDugoutPanel() {
             </button>
           ))}
         </div>
-        <input
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          placeholder="Or type your question…"
-          className="control mt-3 w-full border border-[var(--border)] px-3 py-2 text-[13px]"
-        />
-        <div className="mt-4 rounded-[3px] border border-[var(--border)] bg-[var(--canvas)] px-3 py-3">
-          <p
-            className={`font-label text-[11px] font-bold ${
-              response.verdict === "YES"
-                ? "text-[var(--positive)]"
-                : response.verdict === "NO"
-                  ? "text-[var(--coral)]"
-                  : "text-[var(--navy)]"
-            }`}
+        <form
+          className="mt-3 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void ask(custom || question);
+          }}
+        >
+          <input
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            placeholder="Or type your question…"
+            className="control flex-1 border border-[var(--border)] px-3 py-2 text-[13px]"
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="control bg-[var(--navy)] px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50"
           >
-            {response.verdict}
-          </p>
-          <p className="mt-1 text-[15px] font-extrabold text-[var(--navy)]">{response.headline}</p>
-          <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-body)]">{response.body}</p>
-        </div>
+            Ask
+          </button>
+        </form>
+        {loading ? (
+          <p className="mt-4 text-[13px] text-[var(--text-secondary)]">Thinking…</p>
+        ) : error ? (
+          <p className="mt-4 text-[13px] text-[var(--coral)]">{error}</p>
+        ) : response ? (
+          <div className="mt-4 rounded-[3px] border border-[var(--border)] bg-[var(--canvas)] px-3 py-3">
+            <p
+              className={`font-label text-[11px] font-bold ${
+                response.verdict === "YES"
+                  ? "text-[var(--positive)]"
+                  : response.verdict === "NO"
+                    ? "text-[var(--coral)]"
+                    : "text-[var(--navy)]"
+              }`}
+            >
+              {response.verdict}
+            </p>
+            <p className="mt-1 text-[15px] font-extrabold text-[var(--navy)]">{response.headline}</p>
+            <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-body)]">{response.body}</p>
+          </div>
+        ) : null}
         <p className="mt-2 font-label text-[10px] text-[var(--text-secondary)]">
-          Context: {starters.length} starters · chip {activeChip ?? "none"} · {strategyMode} mode
+          Context: {allPlayers.filter((p) => p.slot !== "bench").length} starters · chip {activeChip ?? "none"} ·{" "}
+          {strategyMode} mode
         </p>
       </div>
     </section>
