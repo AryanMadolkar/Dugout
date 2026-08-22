@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo, Roboto_Condensed } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/v5/Providers";
 import "./globals.css";
 
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${archivo.variable} ${robotoCondensed.variable} h-full`}>
       <body className="min-h-full">
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );
